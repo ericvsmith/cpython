@@ -80,6 +80,9 @@ PyAPI_FUNC(struct _node *) PyParser_SimpleParseStringFlagsFilename(const char *,
                                                                    const char *,
                                                                    int, int);
 #endif
+PyAPI_FUNC(struct _node *) _PyParser_SimpleParseStringFlagsObject(const char *,
+                                                                 PyObject *,
+                                                                 int, int);
 PyAPI_FUNC(struct _node *) PyParser_SimpleParseFileFlags(FILE *, const char *,
                                                          int, int);
 

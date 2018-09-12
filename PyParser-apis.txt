@@ -1,0 +1,116 @@
+parser_state *
+PyParser_New(grammar *g, int start)
+
+void
+PyParser_Delete(parser_state *ps)
+
+int
+PyParser_AddToken(parser_state *ps, int type, char *str,
+                  int lineno, int col_offset, int *expected_ret)
+
+void
+PyParser_ClearError(perrdetail *err)
+
+void
+PyParser_SetError(perrdetail *err)
+
+////////////////////////////////////////////////////////////////////////
+//
+node *
+PyParser_ParseString(const char *s, grammar *g, int start, perrdetail *err_ret)
+
+node *
+PyParser_ParseStringFlags(const char *s, grammar *g, int start,
+                          perrdetail *err_ret, int flags)
+
+node *
+PyParser_ParseStringFlagsFilename(const char *s, const char *filename,
+                                  grammar *g, int start,
+                                  perrdetail *err_ret, int flags)
+
+node *
+PyParser_ParseStringObject(const char *s, PyObject *filename,
+                           grammar *g, int start,
+                           perrdetail *err_ret, int *flags)
+
+node *
+PyParser_ParseStringFlagsFilenameEx(const char *s, const char *filename_str,
+                                    grammar *g, int start,
+                                    perrdetail *err_ret, int *flags)
+
+node *
+PyParser_ParseFile(FILE *fp, const char *filename, grammar *g, int start,
+                   const char *ps1, const char *ps2,
+                   perrdetail *err_ret)
+
+node *
+PyParser_ParseFileFlags(FILE *fp, const char *filename, const char *enc,
+                        grammar *g, int start,
+                        const char *ps1, const char *ps2,
+                        perrdetail *err_ret, int flags)
+
+node *
+PyParser_ParseFileObject(FILE *fp, PyObject *filename,
+                         const char *enc, grammar *g, int start,
+                         const char *ps1, const char *ps2,
+                         perrdetail *err_ret, int *flags)
+
+node *
+PyParser_ParseFileFlagsEx(FILE *fp, const char *filename,
+                          const char *enc, grammar *g, int start,
+                          const char *ps1, const char *ps2,
+                          perrdetail *err_ret, int *flags)
+////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////
+// PyParser_AST*: I'm not planning on changing these in this round, even
+// though they're not documented.
+mod_ty
+PyParser_ASTFromStringObject(const char *s, PyObject *filename, int start,
+                             PyCompilerFlags *flags, PyArena *arena)
+
+mod_ty
+PyParser_ASTFromString(const char *s, const char *filename_str, int start,
+                       PyCompilerFlags *flags, PyArena *arena)
+
+mod_ty
+PyParser_ASTFromFileObject(FILE *fp, PyObject *filename, const char* enc,
+                           int start, const char *ps1,
+                           const char *ps2, PyCompilerFlags *flags, int *errcode,
+                           PyArena *arena)
+mod_ty
+PyParser_ASTFromFile(FILE *fp, const char *filename_str, const char* enc,
+                     int start, const char *ps1,
+                     const char *ps2, PyCompilerFlags *flags, int *errcode,
+                     PyArena *arena)
+////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////
+// PyParser_SimpleParse*: keep these
+node *
+PyParser_SimpleParseFileFlags(FILE *fp, const char *filename, int start, int flags)
+
+node *
+PyParser_SimpleParseStringFlags(const char *str, int start, int flags)
+
+node *
+PyParser_SimpleParseStringFlagsFilename(const char *str, const char *filename,
+                                        int start, int flags)
+
+node *
+PyParser_SimpleParseStringFilename(const char *str, const char *filename, int start)
+
+PyAPI_FUNC(node *)
+PyParser_SimpleParseFile(FILE *fp, const char *filename, int start)
+
+PyAPI_FUNC(node *)
+PyParser_SimpleParseString(const char *str, int start)
+////////////////////////////////////////////////////////////////////////
+
+
+////////////////////////////////////////////////////////////////////////
+// New, not in scope.  This will probably change, anyway.
+node *
+_PyParser_SimpleParseStringFlagsObject(const char *str, PyObject *filename,
+                                       int start, int flags)
+////////////////////////////////////////////////////////////////////////

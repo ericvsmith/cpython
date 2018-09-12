@@ -35,9 +35,11 @@ PyParser_ParseStringFlagsFilename(const char *s, const char *filename,
                           grammar *g, int start,
                           perrdetail *err_ret, int flags)
 {
-    int iflags = flags;
+    /* flags is both an input and output to
+       PyParser_ParseStringFlagsFilenameEx.  Values written to flags are
+       thrown away. */
     return PyParser_ParseStringFlagsFilenameEx(s, filename, g, start,
-                                               err_ret, &iflags);
+                                               err_ret, &flags);
 }
 
 node *
@@ -46,7 +48,7 @@ PyParser_ParseStringObject(const char *s, PyObject *filename,
                            perrdetail *err_ret, int *flags)
 {
     struct tok_state *tok;
-    int exec_input = start == file_input;
+    int exec_input = start == Py_file_input;
 
     if (initerr(err_ret, filename) < 0)
         return NULL;
