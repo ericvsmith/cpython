@@ -37,6 +37,7 @@ struct tok_state {
     int pendin;         /* Pending indents (if > 0) or dedents (if < 0) */
     const char *prompt, *nextprompt;          /* For interactive prompting */
     int lineno;         /* Current line number */
+    int colno;          /* Current column number */
     int level;          /* () [] {} Parentheses nesting level */
             /* Used to allow free continuations inside them */
     /* Stuff for checking on different tab sizes */

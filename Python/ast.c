@@ -9,9 +9,12 @@
 #include "ast.h"
 #include "token.h"
 #include "pythonrun.h"
+#include "internal/parse.h"
 
 #include <assert.h>
 #include <stdbool.h>
+
+extern grammar _PyParser_Grammar; /* From graminit.c */
 
 static int validate_stmts(asdl_seq *);
 static int validate_exprs(asdl_seq *, expr_context_ty, int);
@@ -589,6 +592,7 @@ struct compiling {
     PyArena *c_arena; /* Arena for allocating memory. */
     PyObject *c_filename; /* filename */
     PyObject *c_normalize; /* Normalization function from unicodedata. */
+    grammar *c_grammar; /* The grammar being compiled */
 };
 
 static asdl_seq *seq_for_testlist(struct compiling *, const node *);
@@ -779,6 +783,7 @@ PyAST_FromNodeObject(const node *n, PyCompilerFlags *flags,
     /* borrowed reference */
     c.c_filename = filename;
     c.c_normalize = NULL;
+    c.c_grammar = NULL;
 
     if (TYPE(n) == encoding_decl)
         n = CHILD(n, 0);
@@ -4298,15 +4303,17 @@ fstring_compile_expr(const char *expr_start, const char *expr_end,
     char *str;
     Py_ssize_t len;
     const char *s;
+    perrdetail err;
+    int flags = 0;
 
     assert(expr_end >= expr_start);
     assert(*(expr_start-1) == '{');
     assert(*expr_end == '}' || *expr_end == '!' || *expr_end == ':');
 
-    /* If the substring is all whitespace, it's an error.  We need to catch this
-       here, and not when we call _PyParser_SimpleParseStringFlagsObject,
-       because turning the expression '' in to '()' would go from being invalid
-       to valid. */
+    /* If the substring is all whitespace, it's an error.  We need to catch
+       this here, and not when we call _PyParser_ParseStringObjectEx, because
+       turning the expression '' in to '()' would go from being invalid to
+       valid. */
     for (s = expr_start; s != expr_end; s++) {
         char c = *s;
         /* The Python parser ignores only the following whitespace
@@ -4322,8 +4329,8 @@ fstring_compile_expr(const char *expr_start, const char *expr_end,
 
     /* Add parens around the expression, because this is the only way I can
        get multi-line expressions to parse.  For example:
-       f'''{
-            foo}'''
+       f'''{a+
+            b}'''
     */
     len = expr_end - expr_start;
     /* Allocate 3 extra bytes: open paren, close paren, null byte. */
@@ -4336,8 +4343,17 @@ fstring_compile_expr(const char *expr_start, const char *expr_end,
     str[len+1] = ')';
     str[len+2] = 0;
 
-    mod_n = _PyParser_SimpleParseStringFlagsObject(str, c->c_filename,
-                                                   Py_eval_input, 0);
+    /* Note that we're using _PyParser_Grammar here.  So regardless of what
+       grammar* got us this far, f-strings use Python's own grammar for
+       expressions. */
+    mod_n = _PyParser_ParseStringObjectEx(str, c->c_filename,
+                                          &_PyParser_Grammar,
+                                          Py_eval_input, &err, &flags,
+                                          n->n_lineno, n->n_col_offset);
+    if (mod_n == NULL)
+        PyParser_SetError(&err);
+    PyParser_ClearError(&err);
+
     if (!mod_n) {
         PyMem_RawFree(str);
         return NULL;

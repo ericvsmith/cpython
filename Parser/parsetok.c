@@ -1,4 +1,3 @@
-
 /* Parser-tokenizer link implementation */
 
 #include "pgenheaders.h"
@@ -43,9 +42,10 @@ PyParser_ParseStringFlagsFilename(const char *s, const char *filename,
 }
 
 node *
-PyParser_ParseStringObject(const char *s, PyObject *filename,
-                           grammar *g, int start,
-                           perrdetail *err_ret, int *flags)
+_PyParser_ParseStringObjectEx(const char *s, PyObject *filename,
+                              grammar *g, int start,
+                              perrdetail *err_ret, int *flags,
+                              int lineno, int offset)
 {
     struct tok_state *tok;
     int exec_input = start == Py_file_input;
@@ -56,7 +56,7 @@ PyParser_ParseStringObject(const char *s, PyObject *filename,
     if (*flags & PyPARSE_IGNORE_COOKIE)
         tok = PyTokenizer_FromUTF8(s, exec_input);
     else
-        tok = PyTokenizer_FromString(s, exec_input);
+        tok = _PyTokenizer_FromString(s, exec_input, lineno, offset);
     if (tok == NULL) {
         err_ret->error = PyErr_Occurred() ? E_DECODE : E_NOMEM;
         return NULL;
@@ -67,6 +67,15 @@ PyParser_ParseStringObject(const char *s, PyObject *filename,
     tok->filename = err_ret->filename;
 #endif
     return parsetok(tok, g, start, err_ret, flags);
+}
+
+node *
+PyParser_ParseStringObject(const char *s, PyObject *filename,
+                           grammar *g, int start,
+                           perrdetail *err_ret, int *flags)
+{
+    return _PyParser_ParseStringObjectEx(s, filename, g, start, err_ret, flags,
+                                         0, 0);
 }
 
 node *

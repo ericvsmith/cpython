@@ -8,6 +8,7 @@
 #include <assert.h>
 
 #include "tokenizer.h"
+#include "internal/tokenizer.h"
 #include "errcode.h"
 
 #ifndef PGEN
@@ -43,7 +44,7 @@ extern char *PyOS_Readline(FILE *, FILE *, const char *);
 #define TABSIZE 8
 
 /* Forward */
-static struct tok_state *tok_new(void);
+static struct tok_state *tok_new(int lineno, int colno);
 static int tok_nextc(struct tok_state *tok);
 static void tok_backup(struct tok_state *tok, int c);
 
@@ -117,7 +118,7 @@ const char *_PyParser_TokenNames[] = {
 /* Create and initialize a new tok_state structure */
 
 static struct tok_state *
-tok_new(void)
+tok_new(int lineno, int colno)
 {
     struct tok_state *tok = (struct tok_state *)PyMem_MALLOC(
                                             sizeof(struct tok_state));
@@ -134,7 +135,14 @@ tok_new(void)
     tok->atbol = 1;
     tok->pendin = 0;
     tok->prompt = tok->nextprompt = NULL;
-    tok->lineno = 0;
+
+    /* lineno and colno are normally initialized to 0 and are 0-based.
+       However, the values in a "node" are 1-based, and that's what we expect
+       to be passed in if 0 is not used.  So, if non-zero values are supplied,
+       subtract one from them. */
+    tok->lineno = lineno == 0 ? 0 : lineno-1;
+    tok->colno = colno == 0 ? 0 : colno-1;
+
     tok->level = 0;
     tok->altindstack[0] = 0;
     tok->decoding_state = STATE_INIT;
@@ -804,9 +812,9 @@ decode_str(const char *input, int single, struct tok_state *tok)
 /* Set up tokenizer for string */
 
 struct tok_state *
-PyTokenizer_FromString(const char *str, int exec_input)
+_PyTokenizer_FromString(const char *str, int exec_input, int lineno, int colno)
 {
-    struct tok_state *tok = tok_new();
+    struct tok_state *tok = tok_new(lineno, colno);
     if (tok == NULL)
         return NULL;
     str = decode_str(str, exec_input, tok);
@@ -820,10 +828,18 @@ PyTokenizer_FromString(const char *str, int exec_input)
     return tok;
 }
 
+/* Not sure if this is a "public" function, so I'm going to leave it alone and
+   have it call the new "internal" one. */
+struct tok_state *
+PyTokenizer_FromString(const char *str, int exec_input)
+{
+    return _PyTokenizer_FromString(str, exec_input, 0, 0);
+}
+
 struct tok_state *
 PyTokenizer_FromUTF8(const char *str, int exec_input)
 {
-    struct tok_state *tok = tok_new();
+    struct tok_state *tok = tok_new(0, 0);
     if (tok == NULL)
         return NULL;
 #ifndef PGEN
@@ -855,7 +871,7 @@ struct tok_state *
 PyTokenizer_FromFile(FILE *fp, const char* enc,
                      const char *ps1, const char *ps2)
 {
-    struct tok_state *tok = tok_new();
+    struct tok_state *tok = tok_new(0, 0);
     if (tok == NULL)
         return NULL;
     if ((tok->buf = (char *)PyMem_MALLOC(BUFSIZ)) == NULL) {
