@@ -139,9 +139,10 @@ tok_new(int lineno, int colno)
     /* lineno and colno are normally initialized to 0 and are 0-based.
        However, the values in a "node" are 1-based, and that's what we expect
        to be passed in if 0 is not used.  So, if non-zero values are supplied,
-       subtract one from them. */
-    tok->lineno = lineno == 0 ? 0 : lineno-1;
-    tok->colno = colno == 0 ? 0 : colno-1;
+       subtract one from them.  Also, -1 is sometimes passed in.  interpret it
+       the same as 0. */
+    tok->lineno = lineno <= 0 ? 0 : lineno-1;
+    tok->colno = colno <= 0 ? 0 : colno-1;
 
     tok->level = 0;
     tok->altindstack[0] = 0;
