@@ -2902,6 +2902,22 @@ class TestSlots(unittest.TestCase):
         self.assertEqual(obj.a, 'a')
         self.assertEqual(obj.b, 'b')
 
+    def test_frozen_exception(self):
+        # See bpo-45897.
+        @dataclass(slots=True, frozen=True)
+        class A:
+            a: int
+
+        # If we assign to a known attibute, we get FrozenInstanceError.
+        obj = A(1)
+        with self.assertRaises(FrozenInstanceError):
+            obj.a = 2
+
+        # Assigning to an unknown attribute should get the same error as if the
+        # class weren't frozen, which is AttributeError.
+        with self.assertRaises(AttributeError):
+            obj.undefined_attribute = 2
+
 class TestDescriptors(unittest.TestCase):
     def test_set_name(self):
         # See bpo-33141.
