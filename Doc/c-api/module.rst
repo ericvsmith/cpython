@@ -338,6 +338,7 @@ The available slot types are:
    The *value* pointer of this slot must point to a function of the signature:
 
    .. c:function:: PyObject* create_module(PyObject *spec, PyModuleDef *def)
+      :noindex:
 
    The function receives a :py:class:`~importlib.machinery.ModuleSpec`
    instance, as defined in :PEP:`451`, and the module definition.
@@ -372,6 +373,7 @@ The available slot types are:
    The signature of the function is:
 
    .. c:function:: int exec_module(PyObject* module)
+      :noindex:
 
    If multiple ``Py_mod_exec`` slots are specified, they are processed in the
    order they appear in the *m_slots* array.
@@ -379,6 +381,8 @@ The available slot types are:
 .. c:macro:: Py_mod_multiple_interpreters
 
    Specifies one of the following values:
+
+   .. c:namespace:: NULL
 
    .. c:macro:: Py_MOD_MULTIPLE_INTERPRETERS_NOT_SUPPORTED
 
@@ -406,6 +410,31 @@ The available slot types are:
    machinery defaults to ``Py_MOD_MULTIPLE_INTERPRETERS_NOT_SUPPORTED``.
 
    .. versionadded:: 3.12
+
+.. c:macro:: Py_mod_gil
+
+   Specifies one of the following values:
+
+   .. c:macro:: Py_MOD_GIL_USED
+
+      The module depends on the presence of the global interpreter lock (GIL),
+      and may access global state without synchronization.
+
+   .. c:macro:: Py_MOD_GIL_NOT_USED
+
+      The module is safe to run without an active GIL.
+
+   This slot is ignored by Python builds not configured with
+   :option:`--disable-gil`.  Otherwise, it determines whether or not importing
+   this module will cause the GIL to be automatically enabled. See
+   :envvar:`PYTHON_GIL` and :option:`-X gil <-X>` for more detail.
+
+   Multiple ``Py_mod_gil`` slots may not be specified in one module definition.
+
+   If ``Py_mod_gil`` is not specified, the import machinery defaults to
+   ``Py_MOD_GIL_USED``.
+
+   .. versionadded: 3.13
 
 See :PEP:`489` for more details on multi-phase initialization.
 
@@ -604,6 +633,19 @@ state:
    Return ``-1`` on error, ``0`` on success.
 
    .. versionadded:: 3.9
+
+.. c:function:: int PyUnstable_Module_SetGIL(PyObject *module, void *gil)
+
+   Indicate that *module* does or does not support running without the global
+   interpreter lock (GIL), using one of the values from
+   :c:macro:`Py_mod_gil`. It must be called during *module*'s initialization
+   function. If this function is not called during module initialization, the
+   import machinery assumes the module does not support running without the
+   GIL. This function is only available in Python builds configured with
+   :option:`--disable-gil`.
+   Return ``-1`` on error, ``0`` on success.
+
+   .. versionadded:: 3.13
 
 
 Module lookup

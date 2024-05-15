@@ -3,10 +3,10 @@ preserve
 [clinic start generated code]*/
 
 #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-#  include "pycore_gc.h"            // PyGC_Head
-#  include "pycore_runtime.h"       // _Py_ID()
+#  include "pycore_gc.h"          // PyGC_Head
+#  include "pycore_runtime.h"     // _Py_ID()
 #endif
-
+#include "pycore_modsupport.h"    // _PyArg_UnpackKeywords()
 
 PyDoc_STRVAR(_testinternalcapi_compiler_cleandoc__doc__,
 "compiler_cleandoc($module, /, doc)\n"
@@ -67,6 +67,24 @@ exit:
     return return_value;
 }
 
+PyDoc_STRVAR(_testinternalcapi_new_instruction_sequence__doc__,
+"new_instruction_sequence($module, /)\n"
+"--\n"
+"\n"
+"Return a new, empty InstructionSequence.");
+
+#define _TESTINTERNALCAPI_NEW_INSTRUCTION_SEQUENCE_METHODDEF    \
+    {"new_instruction_sequence", (PyCFunction)_testinternalcapi_new_instruction_sequence, METH_NOARGS, _testinternalcapi_new_instruction_sequence__doc__},
+
+static PyObject *
+_testinternalcapi_new_instruction_sequence_impl(PyObject *module);
+
+static PyObject *
+_testinternalcapi_new_instruction_sequence(PyObject *module, PyObject *Py_UNUSED(ignored))
+{
+    return _testinternalcapi_new_instruction_sequence_impl(module);
+}
+
 PyDoc_STRVAR(_testinternalcapi_compiler_codegen__doc__,
 "compiler_codegen($module, /, ast, filename, optimize, compile_mode=0)\n"
 "--\n"
@@ -123,14 +141,14 @@ _testinternalcapi_compiler_codegen(PyObject *module, PyObject *const *args, Py_s
     }
     ast = args[0];
     filename = args[1];
-    optimize = _PyLong_AsInt(args[2]);
+    optimize = PyLong_AsInt(args[2]);
     if (optimize == -1 && PyErr_Occurred()) {
         goto exit;
     }
     if (!noptargs) {
         goto skip_optional_pos;
     }
-    compile_mode = _PyLong_AsInt(args[3]);
+    compile_mode = PyLong_AsInt(args[3]);
     if (compile_mode == -1 && PyErr_Occurred()) {
         goto exit;
     }
@@ -194,7 +212,7 @@ _testinternalcapi_optimize_cfg(PyObject *module, PyObject *const *args, Py_ssize
     }
     instructions = args[0];
     consts = args[1];
-    nlocals = _PyLong_AsInt(args[2]);
+    nlocals = PyLong_AsInt(args[2]);
     if (nlocals == -1 && PyErr_Occurred()) {
         goto exit;
     }
@@ -265,4 +283,21 @@ _testinternalcapi_assemble_code_object(PyObject *module, PyObject *const *args, 
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=811d50772c8f285a input=a9049054013a1b77]*/
+
+PyDoc_STRVAR(_testinternalcapi_test_long_numbits__doc__,
+"test_long_numbits($module, /)\n"
+"--\n"
+"\n");
+
+#define _TESTINTERNALCAPI_TEST_LONG_NUMBITS_METHODDEF    \
+    {"test_long_numbits", (PyCFunction)_testinternalcapi_test_long_numbits, METH_NOARGS, _testinternalcapi_test_long_numbits__doc__},
+
+static PyObject *
+_testinternalcapi_test_long_numbits_impl(PyObject *module);
+
+static PyObject *
+_testinternalcapi_test_long_numbits(PyObject *module, PyObject *Py_UNUSED(ignored))
+{
+    return _testinternalcapi_test_long_numbits_impl(module);
+}
+/*[clinic end generated code: output=9804015d77d36c77 input=a9049054013a1b77]*/
