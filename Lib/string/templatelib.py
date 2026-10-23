@@ -16,11 +16,11 @@ def convert(obj, /, conversion, printer=None):
     if conversion == 'a':
         return ascii(obj)
     if conversion == 'p':
-        from _pprint import Printer
-
+        # Use the same path as an f-string, so that the printer's result is
+        # checked and joined the same way.
         if printer is None:
-            printer = Printer()
-        return '\n'.join(printer(obj))
+            return f'{obj!p}'
+        return f'{obj!p:{printer}}'
     raise ValueError(f'invalid conversion specifier: {conversion}')
 
 def _template_unpickle(*args):

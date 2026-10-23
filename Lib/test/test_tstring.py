@@ -166,6 +166,14 @@ class TestTString(unittest.TestCase, TStringBaseCase):
         self.assertEqual(convert(obj, "p", printer), f"custom {obj}\nprinted")
         self.assertEqual(fstring(t), f"Pretty: custom {obj}\nprinted")
 
+        # convert() checks the printer's result as an f-string does.
+        def str_printer(value):
+            return "abc"
+
+        with self.assertRaises(TypeError):
+            convert(obj, "p", str_printer)
+        self.assertEqual(convert([1, 2], "p"), f"{[1, 2]!p}")
+
         printer = "not callable"
         t = t"{obj!p:{printer}}"
         self.assertEqual(t.interpolations[0].printer, printer)
