@@ -79,25 +79,41 @@ class Entry:
     value: object
 
 
-@dataclass(frozen=True)
-class BreakableString:
+class _LeafMarker:
+    """Base class for markers, which must be leaves.
+
+    A dataclass that generates __repr__() also generates __pprint__(), so the
+    markers define __repr__() themselves.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self):
+        return f"{type(self).__name__}({self.value!r})"
+
+
+@dataclass(frozen=True, repr=False)
+class BreakableString(_LeafMarker):
     """A string value that printers may split across output lines."""
 
     value: str
 
 
-@dataclass(frozen=True)
-class BreakableBytes:
+@dataclass(frozen=True, repr=False)
+class BreakableBytes(_LeafMarker):
     """A bytes value that printers may split across output lines."""
 
     value: bytes
 
 
-@dataclass(frozen=True)
-class FormattableNumber:
+@dataclass(frozen=True, repr=False)
+class FormattableNumber(_LeafMarker):
     """A number that printers may format according to their settings."""
 
     value: object
+
+
+_BUILTIN_MARKERS = frozenset({BreakableString, BreakableBytes, FormattableNumber})
 
 
 class _ComparisonError:
@@ -205,21 +221,6 @@ class _ValueDocument:
 
 
 @dataclass(frozen=True)
-class _BreakableStringDocument:
-    value: str
-
-
-@dataclass(frozen=True)
-class _BreakableBytesDocument:
-    value: bytes
-
-
-@dataclass(frozen=True)
-class _FormattableNumberDocument:
-    value: object
-
-
-@dataclass(frozen=True)
 class _LazyDocument:
     value: object
     ancestors: tuple
@@ -259,16 +260,12 @@ def _build_document(obj, ancestors=()):
     """
     ancestor_ids = {id(ancestor) for ancestor in ancestors}
 
-    # Breakable values are protocol instructions, not objects to
-    # decompose, so they need special handling.
-    match obj:
-        case BreakableString(value=value):
-            return _BreakableStringDocument(value)
-        case BreakableBytes(value=value):
-            return _BreakableBytesDocument(value)
-        case FormattableNumber(value=value):
-            return _FormattableNumberDocument(value)
-
+    # A marker, such as a BreakableString, has no __pprint__(), so it is a
+    # leaf here.  Which markers are rendered specially is up to the printer.
+    # Every str, bytes, int and float delegates to one of the built-in
+    # markers, so skip decompose() for those.
+    if type(obj) in _BUILTIN_MARKERS:
+        return _ValueDocument(obj)
     header, items = decompose(obj)
     if header is LEAF:
         return _ValueDocument(obj)
@@ -354,18 +351,36 @@ class _KeyValue:
     hang: int | None
 
 
-@dataclass(frozen=True)
-class _Breakable:
-    """A str or bytes literal that the renderer may split across lines.
+class _Marker:
+    """A marker that a function from the printer's marker table renders.
 
-    The split depends on the column where the literal starts, which is only
-    known while rendering.
+    The function returns the marker's lines, which can depend on the column
+    where the marker starts.  That is only known while rendering.
     """
 
-    value: object
-    top: bool
-    expand: bool
-    indent: int
+    __slots__ = ("value", "render", "top_level", "_flat")
+
+    def __init__(self, value, render, top_level):
+        self.value = value
+        self.render = render
+        self.top_level = top_level
+        self._flat = None
+
+    def lines(self, width, last_width):
+        return list(
+            self.render(
+                self.value,
+                width=width,
+                last_width=last_width,
+                top_level=self.top_level,
+            )
+        )
+
+    def flat(self):
+        """Return the lines for unlimited width, normally just one."""
+        if self._flat is None:
+            self._flat = self.lines(sys.maxsize, sys.maxsize)
+        return self._flat
 
 
 _SOFTLINE = _Line(_EMPTY)
@@ -401,10 +416,25 @@ class _FormatOptions:
     sort_dicts: bool
     expand: Expand
     number_format: str | None
+    markers: Mapping[type, object]
 
 
 class Printer:
-    """Default printer. Calling an instance yields the formatted lines."""
+    """Default printer. Calling an instance yields the formatted lines.
+
+    Markers, such as BreakableString, are rendered by the functions in the
+    printer's marker table, which maps a marker class to its function.  A
+    function is called as ``render(marker, *, width, last_width, top_level)``
+    and returns an iterable of lines.  *width* is the room for each line,
+    from the column where the marker starts, and *last_width* is the room for
+    the last line, which leaves space for any text that follows it.  The
+    printer places the first line at the current position and the rest at
+    the marker's starting column, so a line can start with extra spaces to
+    indent it further.  *top_level* is true when the marker is the whole
+    object being printed.  With unlimited width, a function returns the
+    marker's one-line form.  A marker that is not in the table is printed
+    with repr().
+    """
 
     def __init__(
         self,
@@ -417,8 +447,13 @@ class Printer:
         sort_dicts=True,
         number_format=None,
     ):
+        markers = {
+            BreakableString: self._render_literal,
+            BreakableBytes: self._render_literal,
+            FormattableNumber: self._render_number,
+        }
         self._options = _FormatOptions(
-            indent, width, depth, compact, sort_dicts, expand, number_format
+            indent, width, depth, compact, sort_dicts, expand, number_format, markers
         )
 
     def __call__(self, obj):
@@ -427,6 +462,47 @@ class Printer:
         document = _build_document(obj)
         layout_document = _layout_document(document, 0, self._options)
         yield from _render_lines(layout_document, self._options.width)
+
+    def _render_literal(self, marker, *, width, last_width, top_level):
+        """Split a str or bytes value into literals, as PrettyPrinter does."""
+        value = marker.value
+        rep = repr(value)
+        if len(rep) <= last_width or len(value) == 0:
+            return [rep]
+
+        allowance = width - last_width
+        if top_level:
+            # The literal is the whole object, so it is parenthesized.
+            pad = self._options.indent if self._options.expand is not Expand.NEVER else 1
+            width -= pad
+            allowance += 1
+        else:
+            pad = 0
+        wrap = _wrap_bytes if isinstance(value, bytes) else _wrap_string
+        chunks = wrap(value, width, allowance)
+        if len(chunks) <= 1:
+            return [rep]
+        if not top_level:
+            return chunks
+
+        spaces = _SPACE * pad
+        if self._options.expand is not Expand.NEVER:
+            return ["(", *(spaces + chunk for chunk in chunks), ")"]
+        return [
+            "(" + chunks[0],
+            *(spaces + chunk for chunk in chunks[1:-1]),
+            spaces + chunks[-1] + ")",
+        ]
+
+    def _render_number(self, marker, *, width, last_width, top_level):
+        """Format a number with the number_format option."""
+        number_format = self._options.number_format
+        if number_format is None:
+            return [repr(marker.value)]
+        try:
+            return [format(marker.value, number_format)]
+        except Exception:
+            return [repr(marker.value)]
 
 
 def _wrap_string(text, max_width, allowance):
@@ -485,46 +561,13 @@ def _wrap_bytes(data, max_width, allowance):
     return chunks
 
 
-def _break_literal(node, column, width, allowance):
-    """Return the output lines for a literal that starts at *column*.
-
-    Every line after the first includes its leading spaces.
-    """
-    rep = repr(node.value)
-    if column + len(rep) + allowance <= width or len(node.value) == 0:
-        return [rep]
-    if node.top:
-        # The literal is the whole object, so it is parenthesized.
-        indent = column + (node.indent if node.expand else 1)
-        allowance += 1
-    else:
-        indent = column
-    if isinstance(node.value, bytes):
-        chunks = _wrap_bytes(node.value, width - indent, allowance)
-    else:
-        chunks = _wrap_string(node.value, width - indent, allowance)
-    if len(chunks) <= 1:
-        return [rep]
-
-    pad = _SPACE * indent
-    if not node.top:
-        return [chunks[0], *(pad + chunk for chunk in chunks[1:])]
-    if node.expand:
-        return ["(", *(pad + chunk for chunk in chunks), _SPACE * column + ")"]
-    return [
-        "(" + chunks[0],
-        *(pad + chunk for chunk in chunks[1:-1]),
-        pad + chunks[-1] + ")",
-    ]
-
-
-def _format_number(value, number_format):
-    if number_format is None:
-        return repr(value)
-    try:
-        return format(value, number_format)
-    except Exception:
-        return repr(value)
+def _find_marker(value, markers):
+    """Return the function in *markers* for *value*'s class, or None."""
+    for cls in type(value).__mro__:
+        render = markers.get(cls)
+        if render is not None:
+            return render
+    return None
 
 
 def _layout_document(document, level, options):
@@ -536,17 +579,11 @@ def _layout_document(document, level, options):
             )
         case _TextDocument(text=text):
             return _Text(text)
-        case _BreakableStringDocument(value=value) | _BreakableBytesDocument(value=value):
-            return _Breakable(
-                value,
-                level == 0,
-                options.expand is not Expand.NEVER,
-                options.indent,
-            )
-        case _FormattableNumberDocument(value=value):
-            return _Text(_format_number(value, options.number_format))
         case _ValueDocument(value=value):
-            return _Text(repr(value))
+            render = _find_marker(value, options.markers)
+            if render is None:
+                return _Text(repr(value))
+            return _Marker(value, render, level == 0)
         case _ContainerDocument(layout=header, items=items):
             if not items:
                 return _Text(header.empty)
@@ -573,12 +610,6 @@ def _layout_document(document, level, options):
 def _document_source(document):
     match document:
         case _ValueDocument(value=value):
-            return value
-        case _BreakableStringDocument(value=value):
-            return value
-        case _BreakableBytesDocument(value=value):
-            return value
-        case _FormattableNumberDocument(value=value):
             return value
         case _ContainerDocument(source=value):
             return value
@@ -743,20 +774,21 @@ def _render_lines(doc, width):
                 text = flat_text if flat else broken
                 out.append(text)
                 column += len(text)
-            case _Breakable(value=value):
+            case _Marker():
                 if flat:
-                    lines = [repr(value)]
+                    lines = node.flat()
                 else:
-                    lines = _break_literal(
-                        node, column, width, _trailing_width(stack)
-                    )
-                out.append(lines[0])
-                column += len(lines[0])
-                for line in lines[1:]:
-                    yield _EMPTY.join(out)
-                    out.clear()
+                    room = width - column
+                    lines = node.lines(room, room - _trailing_width(stack))
+                start = column
+                for index, line in enumerate(lines):
+                    if index > 0:
+                        yield _EMPTY.join(out)
+                        out.clear()
+                        line = _SPACE * start + line
+                        column = 0
                     out.append(line)
-                    column = len(line)
+                    column += len(line)
             case _KeyValue(key=key, value=value, hang=hang):
                 if flat or hang is None:
                     stack.append((indent, flat, value))
@@ -805,11 +837,17 @@ def _fits(remaining, first, rest):
                 remaining -= len(flat_text if flat else broken)
             case _KeyValue(key=key, value=value):
                 local.append((indent, flat, _Concat((key, _COLON_SPACE, value))))
-            case _Breakable(value=value):
-                if not flat:
-                    # It can break, so the rest goes on later lines.
-                    return True
-                remaining -= len(repr(value))
+            case _Marker():
+                if flat:
+                    lines = node.flat()
+                    if len(lines) != 1:
+                        return False
+                else:
+                    lines = node.lines(remaining, remaining)
+                remaining -= len(lines[0])
+                if len(lines) > 1:
+                    # The rest of the marker goes on later lines.
+                    return remaining >= 0
     return False
 
 

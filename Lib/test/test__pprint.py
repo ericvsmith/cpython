@@ -12,6 +12,7 @@ from _pprint import (
     DELEGATE,
     KWARGS,
     LEAF,
+    BreakableBytes,
     BreakableString,
     Expand,
     FormattableNumber,
@@ -283,6 +284,88 @@ class LiteralTests(unittest.TestCase):
                 yield BreakableString(self.text)
 
         self.assertEqual(pformat(Text(self.TEXT), width=40), pformat(self.TEXT, width=40))
+
+
+class MarkerTableTests(unittest.TestCase):
+    # The marker table isn't public yet, so these tests add entries to the
+    # private one, as a future public option would.
+
+    def test_markers_are_leaves(self):
+        for marker in (BreakableString("a"), BreakableBytes(b"a"), FormattableNumber(1)):
+            with self.subTest(marker=marker):
+                self.assertEqual(decompose(marker), (LEAF, None))
+                self.assertFalse(hasattr(marker, "__pprint__"))
+        self.assertEqual(repr(BreakableString("a")), "BreakableString('a')")
+
+    def test_default_markers(self):
+        self.assertEqual(
+            set(Printer()._options.markers),
+            {BreakableString, BreakableBytes, FormattableNumber},
+        )
+
+    def test_marker_without_an_entry_is_printed_with_repr(self):
+        printer = Printer()
+        del printer._options.markers[FormattableNumber]
+        self.assertEqual("\n".join(printer(FormattableNumber(1))), "FormattableNumber(1)")
+
+    def test_new_marker(self):
+        @dataclass(frozen=True, repr=False)
+        class Shout(_pprint._LeafMarker):
+            value: str
+
+        def render_shout(marker, *, width, last_width, top_level):
+            yield marker.value.upper()
+
+        class Note:
+            def __pprint__(self):
+                yield KWARGS
+                yield "lyric", Shout("all about that bass")
+
+        printer = Printer()
+        printer._options.markers[Shout] = render_shout
+        self.assertEqual("\n".join(printer(Note())), "Note(lyric=ALL ABOUT THAT BASS)")
+        # A printer without the entry prints the marker with repr().
+        self.assertEqual(pformat(Note()), "Note(lyric=Shout('all about that bass'))")
+
+    def test_marker_lines_start_at_its_column(self):
+        @dataclass(frozen=True, repr=False)
+        class Verse(_pprint._LeafMarker):
+            value: tuple
+
+        def render_verse(marker, *, width, last_width, top_level):
+            text = " / ".join(marker.value)
+            if len(text) <= last_width:
+                return [text]
+            return list(marker.value)
+
+        printer = Printer(width=30)
+        printer._options.markers[Verse] = render_verse
+        verse = Verse(("all about that bass", "no treble"))
+        self.assertEqual(
+            "\n".join(printer({"verse": verse})),
+            "{\n"
+            "    'verse': all about that bass\n"
+            "             no treble,\n"
+            "}",
+        )
+        self.assertEqual(
+            "\n".join(Printer(width=78)({"verse": verse})),
+            "{'verse': Verse(('all about that bass', 'no treble'))}",
+        )
+
+    def test_marker_subclass(self):
+        class Loud(BreakableString):
+            pass
+
+        self.assertEqual(pformat(Loud("abc")), "'abc'")
+
+    def test_replace_a_default_marker(self):
+        def render_number(marker, *, width, last_width, top_level):
+            yield f"<{marker.value}>"
+
+        printer = Printer()
+        printer._options.markers[FormattableNumber] = render_number
+        self.assertEqual("\n".join(printer([1, 2.5])), "[<1>, <2.5>]")
 
 
 class HugTests(unittest.TestCase):
