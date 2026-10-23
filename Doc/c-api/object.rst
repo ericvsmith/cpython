@@ -401,13 +401,14 @@ Object Protocol
 
    Pretty print *o* with *printer*, and return the result as a string.  This
    is the equivalent of the Python expression ``f'{o!p:{printer}}'``, or
-   ``f'{o!p}'`` when *printer* is ``NULL``.
+   ``f'{o!p}'`` when *printer* is ``NULL`` or ``None``.
 
    *printer* is called with *o*, and must return an iterable of strings, one
    for each line of output.  The lines are joined with ``'\n'``, with no
-   trailing newline.  If *printer* is ``NULL``, a default printer is used.  It
-   calls *o*'s ``__pprint__()`` method if there is one, and interprets the
-   description that it returns.  Otherwise it uses :c:func:`PyObject_Repr`.
+   trailing newline.  If *printer* is ``NULL`` or ``None``, a default printer
+   is used.  It calls *o*'s ``__pprint__()`` method if there is one, and
+   interprets the description that it returns.  Otherwise it uses
+   :c:func:`PyObject_Repr`.
 
    Raise :exc:`TypeError` if *printer* returns a :class:`str` rather than an
    iterable of lines, or if any line is not a :class:`str`.

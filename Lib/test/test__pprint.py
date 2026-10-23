@@ -27,6 +27,32 @@ def pformat(obj, **options):
 
 
 class PprintProtocolTests(unittest.TestCase):
+    def test_sort_keywords_by_name(self):
+        class Example:
+            def __pprint__(self):
+                yield Layout(sortable=True)
+                yield KWARGS
+                yield "b", 1
+                yield "a", 10
+                yield "c", None
+
+        self.assertEqual(pformat(Example()), "Example(a=10, b=1, c=None)")
+        self.assertEqual(
+            pformat(Example(), sort_dicts=False),
+            "Example(b=1, a=10, c=None)",
+        )
+
+    def test_sort_keywords_after_other_items(self):
+        class Example:
+            def __pprint__(self):
+                yield Layout(sortable=True)
+                yield pprint.Keyword("b", 0)
+                yield "z"
+                yield pprint.Keyword("a", 10)
+                yield "y"
+
+        self.assertEqual(pformat(Example()), "Example('y', 'z', a=10, b=0)")
+
     def test_invalid_printer_options(self):
         for options in ({"indent": -1}, {"width": 0}, {"depth": 0}, {"depth": -1}):
             with self.subTest(options=options):

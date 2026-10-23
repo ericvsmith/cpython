@@ -1535,6 +1535,16 @@ def _load_protocol():
 
 
     def _sorted_documents(items, level, options):
+        """Sort an object's items, keeping keyword items after the others."""
+        keywords = sorted(
+            (item for item in items if isinstance(item, _KeywordDocument)),
+            key=lambda item: item.name,
+        )
+        others = [item for item in items if not isinstance(item, _KeywordDocument)]
+        return _sorted_values(others, level, options) + keywords
+
+
+    def _sorted_values(items, level, options):
         if not any(
             isinstance(_document_source(_document_sort_key(item)), Set) for item in items
         ):

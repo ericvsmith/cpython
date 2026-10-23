@@ -844,7 +844,7 @@ PyObject *
 PyObject_Pretty(PyObject *v, PyObject *printer)
 {
     PyObject *default_printer = NULL;
-    if (printer == NULL) {
+    if (printer == NULL || printer == Py_None) {
         PyObject *module = PyImport_ImportModule("pprint");
         if (module == NULL) {
             return NULL;

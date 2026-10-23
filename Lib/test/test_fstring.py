@@ -1489,6 +1489,8 @@ except Exception:
             f'{1!p:{int_lines_printer}}'
         # Lines are joined as they are, even if they contain newlines.
         self.assertEqual(f'{1!p:{newline_printer}}', 'a\nb\nc')
+        # A printer of None means the default printer.
+        self.assertEqual(f'{[1, 2]!p:{None}}', f'{[1, 2]!p}')
 
         # Conversions can have trailing whitespace after them since it
         # does not provide any significance
