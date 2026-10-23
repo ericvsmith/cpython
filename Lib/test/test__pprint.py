@@ -490,6 +490,92 @@ class HugTests(unittest.TestCase):
             "defaultdict(<class 'list'>,\n"
         ))
 
+    def test_always_expands_inside_hug(self):
+        obj = [list(range(4)), collections.deque([[1, 2], [3]])]
+        self.assertEqual(
+            pformat(obj, width=25, expand=Expand.ALWAYS),
+            "[\n"
+            "    [\n"
+            "        0,\n"
+            "        1,\n"
+            "        2,\n"
+            "        3,\n"
+            "    ],\n"
+            "    deque([\n"
+            "        [\n"
+            "            1,\n"
+            "            2,\n"
+            "        ],\n"
+            "        [\n"
+            "            3,\n"
+            "        ],\n"
+            "    ]),\n"
+            "]",
+        )
+
+
+class CompactTests(unittest.TestCase):
+    def test_fit_packs_items(self):
+        self.assertEqual(
+            pformat([(1, 2)] * 8, width=30, compact=True),
+            "[\n"
+            "    (1, 2), (1, 2), (1, 2),\n"
+            "    (1, 2), (1, 2), (1, 2),\n"
+            "    (1, 2), (1, 2),\n"
+            "]",
+        )
+
+    def test_fit_broken_item_has_own_lines(self):
+        self.assertEqual(
+            pformat([1, 2, list(range(12)), 3, 4], width=20, compact=True),
+            "[\n"
+            "    1, 2,\n"
+            "    [\n"
+            "        0, 1, 2, 3,\n"
+            "        4, 5, 6, 7,\n"
+            "        8, 9, 10,\n"
+            "        11,\n"
+            "    ],\n"
+            "    3, 4,\n"
+            "]",
+        )
+
+    def test_always_does_not_pack_containers(self):
+        self.assertEqual(
+            pformat(
+                [list(range(12)), [1]],
+                width=20, compact=True, expand=Expand.ALWAYS,
+            ),
+            "[\n"
+            "    [\n"
+            "        0, 1, 2, 3,\n"
+            "        4, 5, 6, 7,\n"
+            "        8, 9, 10,\n"
+            "        11,\n"
+            "    ],\n"
+            "    [\n"
+            "        1,\n"
+            "    ],\n"
+            "]",
+        )
+
+    def test_never_matches_pretty_printer(self):
+        obj = [1, 2, list(range(12)), 3, 4]
+        self.assertEqual(
+            pformat(obj, width=20, compact=True, expand=Expand.NEVER, indent=1),
+            pprint.PrettyPrinter(width=20, compact=True).pformat(obj),
+        )
+
+    def test_key_value_items_are_not_packed(self):
+        self.assertEqual(
+            pformat({"a": 1, "b": 2, "c": 3}, width=10, compact=True),
+            "{\n"
+            "    'a': 1,\n"
+            "    'b': 2,\n"
+            "    'c': 3,\n"
+            "}",
+        )
+
 
 class DescriptionTests(unittest.TestCase):
     def test_ordered_dict(self):

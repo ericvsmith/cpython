@@ -503,7 +503,7 @@ def _layout_document(document, level, options):
                 hugged = _hugged_index(items)
             parts = [_item_document(item, level + 1, options) for item in items]
             if hugged is not None:
-                return _hugged_document(header, parts)
+                return _hugged_document(header, parts, level, options)
             positional = not any(
                 isinstance(item, (_EntryDocument, _KeywordDocument)) for item in items
             )
@@ -609,7 +609,7 @@ def _hugged_index(items):
     return found
 
 
-def _hugged_document(header, parts):
+def _hugged_document(header, parts, level, options):
     """Keep every item on the opening and closing lines.
 
     Only the one container among the items breaks across lines, so its
@@ -617,23 +617,50 @@ def _hugged_document(header, parts):
     """
     close = header.single_close if len(parts) == 1 else header.close
     separator = _Text(header.sep + _SPACE)
-    return _Group(
-        _Concat((_Text(header.open), _join(separator, parts), _Text(close)))
-    )
+    doc = _Concat((_Text(header.open), _join(separator, parts), _Text(close)))
+    if options.expand is Expand.ALWAYS and level > 0:
+        return doc
+    return _Group(doc)
+
+
+def _compact_body(separator, parts, column, options):
+    """Join items, packing those that fit on one line, as PrettyPrinter does.
+
+    An item whose one-line form fits in the width left after *column* shares
+    lines with its packable neighbors.  Any other item gets lines of its own,
+    so a container that breaks never starts or ends partway along a line.
+    """
+    available = options.width - column
+    packable = []
+    for part in parts:
+        lines = list(_render_lines(_Group(part), _sys.maxsize))
+        packable.append(len(lines) == 1 and len(lines[0]) < available)
+    docs = [parts[0]]
+    for index in range(1, len(parts)):
+        if packable[index - 1] and packable[index]:
+            line = _Group(_Concat((_Line(), parts[index])))
+        else:
+            line = _Concat((_Line(), parts[index]))
+        docs.append(_Concat((separator, line)))
+    return _Concat(tuple(docs))
 
 
 def _container_document(header, parts, positional, level, options):
     close = header.single_close if len(parts) == 1 else header.close
     separator = _Text(header.sep)
+    compact = options.compact and positional
 
     if options.expand is Expand.NEVER:
-        if options.compact and positional:
-            body = _join(_Concat((separator, _Group(_Line()))), parts)
-            return _Concat((_Text(header.open), _Align(body), _Text(close)))
-        body = _join(_Concat((separator, _Line())), parts)
+        if compact:
+            body = _compact_body(separator, parts, level + 1, options)
+        else:
+            body = _join(_Concat((separator, _Line())), parts)
         return _Group(_Concat((_Text(header.open), _Align(body), _Text(close))))
 
-    body = _join(_Concat((separator, _Line())), parts)
+    if compact:
+        body = _compact_body(separator, parts, options.indent * (level + 1), options)
+    else:
+        body = _join(_Concat((separator, _Line())), parts)
     doc = _Concat(
         (
             _Text(header.open),
