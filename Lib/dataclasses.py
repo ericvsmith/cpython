@@ -1189,7 +1189,9 @@ def _process_class(cls, init, repr, eq, order, unsafe_hash, frozen,
                             locals={'__dataclasses_recursive_repr': recursive_repr},
                             decorator="@__dataclasses_recursive_repr()")
 
-        if '__pprint__' not in cls.__dict__:
+        # A hand-written __repr__() may show something other than the
+        # fields, so only describe the fields when __repr__() is generated.
+        if '__pprint__' not in cls.__dict__ and '__repr__' not in cls.__dict__:
             field_names = tuple(f.name for f in flds)
             func_builder.add_fn('__pprint__',
                                 ('self',),

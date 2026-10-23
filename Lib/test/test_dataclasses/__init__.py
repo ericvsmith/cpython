@@ -2720,6 +2720,22 @@ class TestRepr(unittest.TestCase):
 
         self.assertIs(C.__dict__['__pprint__'], custom_pprint)
 
+    def test_pprint_not_generated_if_repr_defined(self):
+        # A hand-written __repr__() may show something other than the fields,
+        # such as a field with a secret value.  A generated __pprint__() would
+        # take precedence over it, so none is generated.
+        from _pprint import Printer
+
+        @dataclass
+        class C:
+            password: str
+
+            def __repr__(self):
+                return 'C(password=...)'
+
+        self.assertNotIn('__pprint__', C.__dict__)
+        self.assertEqual("\n".join(Printer()(C('secret'))), 'C(password=...)')
+
     def test_pprint_not_generated_if_repr_false(self):
         @dataclass(repr=False)
         class C:
