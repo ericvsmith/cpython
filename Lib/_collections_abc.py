@@ -34,6 +34,7 @@ Unit tests are in test_collections.
 
 from abc import ABCMeta, abstractmethod
 import sys
+lazy from _pprint import Layout as _Layout
 
 GenericAlias = type(list[int])
 EllipsisType = type(...)
@@ -840,8 +841,8 @@ class MappingView(Sized):
         return '{0.__class__.__name__}({0._mapping!r})'.format(self)
 
     def __pprint__(self):
-        from pprint import _mapping_view_pprint
-        return _mapping_view_pprint(self)
+        yield _Layout(open=f'{type(self).__name__}(', close=')', hug=True)
+        yield self._mapping
 
     __class_getitem__ = classmethod(GenericAlias)
 

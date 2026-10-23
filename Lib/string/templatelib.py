@@ -16,8 +16,6 @@ def convert(obj, /, conversion, printer=None):
     if conversion == 'a':
         return ascii(obj)
     if conversion == 'p':
-        if printer is None:
-            return f'{obj!p}'
         return f'{obj!p:{printer}}'
     raise ValueError(f'invalid conversion specifier: {conversion}')
 

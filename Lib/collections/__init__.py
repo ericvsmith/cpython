@@ -34,6 +34,10 @@ abc = _collections_abc
 
 lazy from copy import copy as _copy
 lazy from heapq import nlargest as _nlargest
+lazy from _pprint import DELEGATE as _DELEGATE
+lazy from _pprint import ITEMS as _ITEMS
+lazy from _pprint import KWARGS as _KWARGS
+lazy from _pprint import Layout as _Layout
 from itertools import chain as _chain
 from itertools import repeat as _repeat
 from itertools import starmap as _starmap
@@ -283,8 +287,9 @@ class OrderedDict(dict):
         return '%s(%r)' % (self.__class__.__name__, dict(self.items()))
 
     def __pprint__(self):
-        from pprint import _ordered_dict_pprint
-        return _ordered_dict_pprint(self)
+        yield _Layout(empty=f'{type(self).__name__}()')
+        yield _ITEMS
+        yield from self.items()
 
     def __reduce__(self):
         'Return state information for pickling'
@@ -478,9 +483,8 @@ def namedtuple(typename, field_names, *, rename=False, defaults=None, module=Non
         return self.__class__.__name__ + repr_fmt % self
 
     def __pprint__(self):
-        from pprint import KWARGS, Layout
-        yield Layout(name=self.__class__.__name__)
-        yield KWARGS
+        yield _Layout(name=self.__class__.__name__)
+        yield _KWARGS
         yield from zip(self._fields, self)
 
     def _asdict(self):
@@ -771,8 +775,10 @@ class Counter(dict):
         return f'{self.__class__.__name__}({d!r})'
 
     def __pprint__(self):
-        from pprint import _counter_pprint
-        return _counter_pprint(self)
+        name = type(self).__name__
+        yield _Layout(open=f'{name}({{', close='})', empty=f'{name}()')
+        yield _ITEMS
+        yield from self.most_common()
 
     # Multiset-style mathematical operations discussed in:
     #       Knuth TAOCP Volume II section 4.6.3 exercise 19
@@ -1111,8 +1117,8 @@ class ChainMap(_collections_abc.MutableMapping):
         return f'{self.__class__.__name__}({", ".join(map(repr, self.maps))})'
 
     def __pprint__(self):
-        from pprint import _chainmap_pprint
-        return _chainmap_pprint(self)
+        yield _Layout(open=f'{type(self).__name__}(', close=')', empty=repr(self))
+        yield from self.maps
 
     @classmethod
     def fromkeys(cls, iterable, value=None, /):
@@ -1237,8 +1243,8 @@ class UserDict(_collections_abc.MutableMapping):
         return repr(self.data)
 
     def __pprint__(self):
-        from pprint import _user_container_pprint
-        return _user_container_pprint(self)
+        yield _DELEGATE
+        yield self.data
 
     def __or__(self, other):
         if isinstance(other, UserDict):
@@ -1324,8 +1330,8 @@ class UserList(_collections_abc.MutableSequence):
         return repr(self.data)
 
     def __pprint__(self):
-        from pprint import _user_container_pprint
-        return _user_container_pprint(self)
+        yield _DELEGATE
+        yield self.data
 
     def __lt__(self, other):
         return self.data < self.__cast(other)
@@ -1460,8 +1466,8 @@ class UserString(_collections_abc.Sequence):
         return repr(self.data)
 
     def __pprint__(self):
-        from pprint import _user_container_pprint
-        return _user_container_pprint(self)
+        yield _DELEGATE
+        yield self.data
 
     def __int__(self):
         return int(self.data)

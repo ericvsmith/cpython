@@ -63,6 +63,8 @@ static const char* _Py_stdlib_module_names[] = {
 "_pickle",
 "_posixshmem",
 "_posixsubprocess",
+"_pprint",
+"_pprint_protocol",
 "_py_abc",
 "_py_warnings",
 "_pybuiltins",

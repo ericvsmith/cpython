@@ -7,6 +7,7 @@ import abc
 from reprlib import recursive_repr
 lazy import copy
 lazy import re
+lazy from _pprint import KWARGS, Layout
 
 
 __all__ = ['dataclass',
@@ -922,8 +923,6 @@ def _set_new_attribute(cls, name, value):
 
 
 def _dataclass_pprint(obj, field_names):
-    from pprint import KWARGS, Layout
-
     yield Layout(name=obj.__class__.__qualname__)
     yield KWARGS
     for name in field_names:
