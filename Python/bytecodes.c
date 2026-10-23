@@ -5871,13 +5871,10 @@ dummy_func(
 
         inst(FORMAT_PRETTY, (value, printer -- res)) {
             assert(oparg <= 1);
-            PyObject *lines = _PyObject_Pretty(
+            PyObject *res_o = PyObject_Pretty(
                 PyStackRef_AsPyObjectBorrow(value),
                 oparg ? NULL : PyStackRef_AsPyObjectBorrow(printer));
             DECREF_INPUTS();
-            ERROR_IF(lines == NULL);
-            PyObject *res_o = PyUnicode_Join(_Py_LATIN1_CHR('\n'), lines);
-            Py_DECREF(lines);
             ERROR_IF(res_o == NULL);
             res = PyStackRef_FromPyObjectSteal(res_o);
         }

@@ -394,6 +394,7 @@ PyAPI_FUNC(void) PyType_Modified(PyTypeObject *);
 /* Generic operations on objects */
 PyAPI_FUNC(PyObject *) PyObject_Repr(PyObject *);
 PyAPI_FUNC(PyObject *) PyObject_Str(PyObject *);
+PyAPI_FUNC(PyObject *) PyObject_Pretty(PyObject *, PyObject *);
 PyAPI_FUNC(PyObject *) PyObject_ASCII(PyObject *);
 PyAPI_FUNC(PyObject *) PyObject_Bytes(PyObject *);
 PyAPI_FUNC(PyObject *) PyObject_RichCompare(PyObject *, PyObject *, int);

@@ -841,7 +841,7 @@ PyObject_Str(PyObject *v)
 }
 
 PyObject *
-_PyObject_Pretty(PyObject *v, PyObject *printer)
+PyObject_Pretty(PyObject *v, PyObject *printer)
 {
     PyObject *default_printer = NULL;
     if (printer == NULL) {
@@ -861,14 +861,21 @@ _PyObject_Pretty(PyObject *v, PyObject *printer)
         }
         printer = default_printer;
     }
-    PyObject *result = PyObject_CallOneArg(printer, v);
+    PyObject *lines = PyObject_CallOneArg(printer, v);
     Py_XDECREF(default_printer);
-    if (result == NULL) {
+    if (lines == NULL) {
         return NULL;
     }
-    PyObject *iterator = PyObject_GetIter(result);
-    Py_DECREF(result);
-    return iterator;
+    /* A str is iterable, but its items are characters, not lines. */
+    if (PyUnicode_Check(lines)) {
+        PyErr_SetString(PyExc_TypeError,
+                        "printer must return an iterable of lines, not str");
+        Py_DECREF(lines);
+        return NULL;
+    }
+    PyObject *result = PyUnicode_Join(_Py_LATIN1_CHR('\n'), lines);
+    Py_DECREF(lines);
+    return result;
 }
 
 PyObject *

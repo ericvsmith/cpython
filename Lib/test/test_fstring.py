@@ -1467,6 +1467,29 @@ except Exception:
 
         self.assertEqual(f'{1!p:{Printer()}}', 'printed\n1')
 
+        # A printer returns an iterable of str lines.  A str is rejected,
+        # since its items are characters, not lines.
+        def str_printer(obj):
+            return 'abc'
+
+        def int_printer(obj):
+            return 42
+
+        def int_lines_printer(obj):
+            return [1, 2]
+
+        def newline_printer(obj):
+            return ['a\nb', 'c']
+
+        with self.assertRaises(TypeError):
+            f'{1!p:{str_printer}}'
+        with self.assertRaises(TypeError):
+            f'{1!p:{int_printer}}'
+        with self.assertRaises(TypeError):
+            f'{1!p:{int_lines_printer}}'
+        # Lines are joined as they are, even if they contain newlines.
+        self.assertEqual(f'{1!p:{newline_printer}}', 'a\nb\nc')
+
         # Conversions can have trailing whitespace after them since it
         # does not provide any significance
         self.assertEqual(f"{3!s  }", "3")

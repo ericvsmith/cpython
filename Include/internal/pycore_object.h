@@ -44,8 +44,6 @@ extern "C" {
    assert(_PyObject_CheckConsistency(obj, 1)); */
 extern int _PyObject_CheckConsistency(PyObject *op, int check_content);
 
-// Export for shared _testinternalcapi extension
-PyAPI_FUNC(PyObject *) _PyObject_Pretty(PyObject *obj, PyObject *printer);
 extern PyObject *_PyObject_CallPprintHelper(PyObject *obj, const char *name);
 #define _PyObject_PPRINT_METHOD(func, helper) \
     static PyObject *func(PyObject *self, PyObject *Py_UNUSED(ignored)) \

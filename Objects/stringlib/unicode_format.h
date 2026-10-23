@@ -775,15 +775,7 @@ do_conversion(PyObject *obj, Py_UCS4 conversion)
     case 'a':
         return PyObject_ASCII(obj);
     case 'p':
-    {
-        PyObject *lines = _PyObject_Pretty(obj, NULL);
-        if (lines == NULL) {
-            return NULL;
-        }
-        PyObject *result = PyUnicode_Join(_Py_LATIN1_CHR('\n'), lines);
-        Py_DECREF(lines);
-        return result;
-    }
+        return PyObject_Pretty(obj, NULL);
     default:
         if (conversion > 32 && conversion < 127) {
                 /* It's the ASCII subrange; casting to char is safe

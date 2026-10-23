@@ -1240,6 +1240,8 @@
     added = '3.2'
 [function.PyObject_Str]
     added = '3.2'
+[function.PyObject_Pretty]
+    added = '3.16'
 [function.PyObject_Type]
     added = '3.2'
 [data.PyProperty_Type]

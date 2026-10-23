@@ -6254,7 +6254,7 @@
             assert(oparg <= 1);
             _PyFrame_SetStackPointer(frame, stack_pointer);
             _PyFrame_StackPointerValidate(frame);
-            PyObject *lines = _PyObject_Pretty(
+            PyObject *res_o = PyObject_Pretty(
                 PyStackRef_AsPyObjectBorrow(value),
                 oparg ? NULL : PyStackRef_AsPyObjectBorrow(printer));
             _PyFrame_StackPointerInvalidate(frame);
@@ -6274,17 +6274,6 @@
             _PyFrame_StackPointerInvalidate(frame);
             stack_pointer += -2;
             ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
-            if (lines == NULL) {
-                JUMP_TO_LABEL(error);
-            }
-            _PyFrame_SetStackPointer(frame, stack_pointer);
-            _PyFrame_StackPointerValidate(frame);
-            PyObject *res_o = PyUnicode_Join(_Py_LATIN1_CHR('\n'), lines);
-            _PyFrame_StackPointerInvalidate(frame);
-            assert(stack_pointer == _PyFrame_GetStackPointer(frame));
-            _PyFrame_StackPointerValidate(frame);
-            Py_DECREF(lines);
-            _PyFrame_StackPointerInvalidate(frame);
             if (res_o == NULL) {
                 JUMP_TO_LABEL(error);
             }

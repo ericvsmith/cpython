@@ -1916,6 +1916,10 @@ PyObject_Size:PyObject*:o:0:
 PyObject_Str:PyObject*::+1:
 PyObject_Str:PyObject*:o:0:
 
+PyObject_Pretty:PyObject*::+1:
+PyObject_Pretty:PyObject*:o:0:
+PyObject_Pretty:PyObject*:printer:0:
+
 Py_TYPE:PyObject*::0:
 Py_TYPE:PyObject*:ob:0:
 
