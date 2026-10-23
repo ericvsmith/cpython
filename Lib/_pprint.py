@@ -15,7 +15,7 @@ import collections as _collections
 import sys
 import types as _types
 
-from collections.abc import Mapping, Set
+from collections.abc import Iterable, Mapping, Set
 from dataclasses import dataclass, field
 from itertools import chain
 from string.templatelib import Interpolation as _Interpolation
@@ -30,7 +30,10 @@ VALUES = sentinel("VALUES", repr="pprint.VALUES")
 KWARGS = sentinel("KWARGS", repr="pprint.KWARGS")
 ITEMS = sentinel("ITEMS", repr="pprint.ITEMS")
 DELEGATE = sentinel("DELEGATE", repr="pprint.DELEGATE")
+LEAF = sentinel("LEAF", repr="pprint.LEAF")
 _MISSING = sentinel("_MISSING")
+
+type DescriptionType = Iterable[object]
 
 
 ########################################################################
@@ -56,6 +59,7 @@ class Layout:
     single_close: str | None = None
     recursion: str = "..."
     sortable: bool = False
+    hug: bool = False
 
 
 @dataclass(frozen=True)
@@ -87,6 +91,13 @@ class BreakableBytes:
     """A bytes value that printers may split across output lines."""
 
     value: bytes
+
+
+@dataclass(frozen=True)
+class FormattableNumber:
+    """A number that printers may format according to their settings."""
+
+    value: object
 
 
 class _ComparisonError:
@@ -126,13 +137,13 @@ def decompose(obj):
     """Read one level of an object's pretty-print description stream."""
     method = _find_pprint(type(obj))
     if method is None:
-        return None, ()
+        return LEAF, None
     stream = iter(method(obj))
 
     first = next(stream, _MISSING)
     if first is DELEGATE:
         value = next(stream, _MISSING)
-        return (DELEGATE, value) if value is not _MISSING else (None, ())
+        return (DELEGATE, value) if value is not _MISSING else (LEAF, None)
 
     if isinstance(first, Layout):
         layout = first
@@ -183,6 +194,7 @@ def decompose(obj):
         single_close=close if layout.single_close is None else layout.single_close,
         recursion=layout.recursion,
         sortable=layout.sortable,
+        hug=layout.hug,
     )
     return filled, items
 
@@ -200,6 +212,11 @@ class _BreakableStringDocument:
 @dataclass(frozen=True)
 class _BreakableBytesDocument:
     value: bytes
+
+
+@dataclass(frozen=True)
+class _FormattableNumberDocument:
+    value: object
 
 
 @dataclass(frozen=True)
@@ -249,9 +266,11 @@ def _build_document(obj, ancestors=()):
             return _BreakableStringDocument(value)
         case BreakableBytes(value=value):
             return _BreakableBytesDocument(value)
+        case FormattableNumber(value=value):
+            return _FormattableNumberDocument(value)
 
     header, items = decompose(obj)
-    if header is None:
+    if header is LEAF:
         return _ValueDocument(obj)
     if header is DELEGATE:
         if id(obj) in ancestor_ids:
@@ -335,6 +354,20 @@ class _KeyValue:
     hang: int | None
 
 
+@dataclass(frozen=True)
+class _Breakable:
+    """A str or bytes literal that the renderer may split across lines.
+
+    The split depends on the column where the literal starts, which is only
+    known while rendering.
+    """
+
+    value: object
+    top: bool
+    expand: bool
+    indent: int
+
+
 _SOFTLINE = _Line(_EMPTY)
 _COLON_SPACE = _Text(": ")
 
@@ -367,6 +400,7 @@ class _FormatOptions:
     compact: bool
     sort_dicts: bool
     expand: Expand
+    number_format: str | None
 
 
 class Printer:
@@ -379,11 +413,12 @@ class Printer:
         depth=None,
         *,
         compact=False,
-        sort_dicts=True,
         expand=Expand.FIT,
+        sort_dicts=True,
+        number_format=None,
     ):
         self._options = _FormatOptions(
-            indent, width, depth, compact, sort_dicts, expand
+            indent, width, depth, compact, sort_dicts, expand, number_format
         )
 
     def __call__(self, obj):
@@ -394,74 +429,102 @@ class Printer:
         yield from _render_lines(layout_document, self._options.width)
 
 
-def _literal_parts(parts, indent):
-    docs = [_Text(part) for part in parts]
-    if len(docs) == 1:
-        return docs[0]
-    body = _join(_Line(), docs)
-    return _Group(
-        _Concat(
-            (
-                _Text("("),
-                _Nest(indent, _Concat((_SOFTLINE, body))),
-                _SOFTLINE,
-                _Text(")"),
-            )
-        )
-    )
-
-
-def _string_document(obj, level, width, indent):
-    if not obj:
-        return _Text(repr(obj))
+def _wrap_string(text, max_width, allowance):
+    """Split a string's repr into chunks, as PrettyPrinter does."""
     import re
 
-    width = max(1, width - level - indent)
     chunks = []
-    for line in obj.splitlines(True):
-        if len(repr(line)) <= width:
-            chunks.append(repr(line))
+    lines = text.splitlines(True)
+    max_width1 = max_width
+    for i, line in enumerate(lines):
+        rep = repr(line)
+        if i == len(lines) - 1:
+            max_width1 -= allowance
+        if len(rep) <= max_width1:
+            chunks.append(rep)
             continue
-        pieces = re.findall(r"\S*\s*", line)
-        if pieces and not pieces[-1]:
-            pieces.pop()
-        current = ""
-        for part in pieces:
+        # A list of alternating (non-space, space) strings, ending with an
+        # empty string.
+        parts = re.findall(r"\S*\s*", line)
+        parts.pop()
+        max_width2 = max_width
+        current = _EMPTY
+        for j, part in enumerate(parts):
             candidate = current + part
-            if current and len(repr(candidate)) > width:
-                chunks.append(repr(current))
+            if j == len(parts) - 1 and i == len(lines) - 1:
+                max_width2 -= allowance
+            if len(repr(candidate)) > max_width2:
+                if current:
+                    chunks.append(repr(current))
                 current = part
             else:
                 current = candidate
         if current:
             chunks.append(repr(current))
-    if len(chunks) <= 1:
-        return _Text(repr(obj))
-    return _literal_parts(chunks, indent)
+    return chunks
 
 
-def _bytes_document(obj, level, width, indent):
-    if len(obj) <= 4:
-        return _Text(repr(obj))
-    width = max(1, width - level - indent)
+def _wrap_bytes(data, max_width, allowance):
+    """Split a bytes value's repr into chunks, as PrettyPrinter does."""
     chunks = []
     current = b""
-    for index in range(0, len(obj), 4):
-        part = obj[index:index + 4]
+    last = len(data) // 4 * 4
+    for i in range(0, len(data), 4):
+        part = data[i:i + 4]
         candidate = current + part
-        if len(repr(candidate)) > width and current:
-            chunks.append(repr(current))
+        if i == last:
+            max_width -= allowance
+        if len(repr(candidate)) > max_width:
+            if current:
+                chunks.append(repr(current))
             current = part
         else:
             current = candidate
     if current:
         chunks.append(repr(current))
-    if len(chunks) == 1:
-        doc = _Text(repr(obj))
-        if level == 0:
-            return _Concat((_Text("("), doc, _Text(")")))
-        return doc
-    return _literal_parts(chunks, indent)
+    return chunks
+
+
+def _break_literal(node, column, width, allowance):
+    """Return the output lines for a literal that starts at *column*.
+
+    Every line after the first includes its leading spaces.
+    """
+    rep = repr(node.value)
+    if column + len(rep) + allowance <= width or len(node.value) == 0:
+        return [rep]
+    if node.top:
+        # The literal is the whole object, so it is parenthesized.
+        indent = column + (node.indent if node.expand else 1)
+        allowance += 1
+    else:
+        indent = column
+    if isinstance(node.value, bytes):
+        chunks = _wrap_bytes(node.value, width - indent, allowance)
+    else:
+        chunks = _wrap_string(node.value, width - indent, allowance)
+    if len(chunks) <= 1:
+        return [rep]
+
+    pad = _SPACE * indent
+    if not node.top:
+        return [chunks[0], *(pad + chunk for chunk in chunks[1:])]
+    if node.expand:
+        return ["(", *(pad + chunk for chunk in chunks), _SPACE * column + ")"]
+    return [
+        "(" + chunks[0],
+        *(pad + chunk for chunk in chunks[1:-1]),
+        pad + chunks[-1] + ")",
+    ]
+
+
+def _format_number(value, number_format):
+    if number_format is None:
+        return repr(value)
+    try:
+        return format(value, number_format)
+    except Exception:
+        return repr(value)
 
 
 def _layout_document(document, level, options):
@@ -473,10 +536,15 @@ def _layout_document(document, level, options):
             )
         case _TextDocument(text=text):
             return _Text(text)
-        case _BreakableStringDocument(value=value):
-            return _string_document(value, level, options.width, options.indent)
-        case _BreakableBytesDocument(value=value):
-            return _bytes_document(value, level, options.width, options.indent)
+        case _BreakableStringDocument(value=value) | _BreakableBytesDocument(value=value):
+            return _Breakable(
+                value,
+                level == 0,
+                options.expand is not Expand.NEVER,
+                options.indent,
+            )
+        case _FormattableNumberDocument(value=value):
+            return _Text(_format_number(value, options.number_format))
         case _ValueDocument(value=value):
             return _Text(repr(value))
         case _ContainerDocument(layout=header, items=items):
@@ -487,7 +555,13 @@ def _layout_document(document, level, options):
 
             if header.sortable and options.sort_dicts:
                 items = _sorted_documents(items, level, options)
+            hugged = None
+            if header.hug and options.expand is not Expand.NEVER:
+                items = tuple(_resolve_item(item) for item in items)
+                hugged = _hugged_index(items)
             parts = [_item_document(item, level + 1, options) for item in items]
+            if hugged is not None:
+                return _hugged_document(header, parts)
             positional = not any(
                 isinstance(item, (_EntryDocument, _KeywordDocument)) for item in items
             )
@@ -503,6 +577,8 @@ def _document_source(document):
         case _BreakableStringDocument(value=value):
             return value
         case _BreakableBytesDocument(value=value):
+            return value
+        case _FormattableNumberDocument(value=value):
             return value
         case _ContainerDocument(source=value):
             return value
@@ -560,6 +636,44 @@ def _item_document(item, level, options):
             )
         case _:
             return _layout_document(item, level, options)
+
+
+def _resolve_item(item):
+    """Build the documents of an item's lazy parts."""
+    match item:
+        case _LazyDocument(value=value, ancestors=ancestors):
+            return _build_document(value, ancestors)
+        case _KeywordDocument(value=_LazyDocument(value=value, ancestors=ancestors)):
+            return _KeywordDocument(
+                item.name, _build_document(value, ancestors), item.source
+            )
+        case _:
+            return item
+
+
+def _hugged_index(items):
+    """Return the index of the only item that is a non-empty container, or None."""
+    found = None
+    for index, item in enumerate(items):
+        document = item.value if isinstance(item, _KeywordDocument) else item
+        if isinstance(document, _ContainerDocument) and len(document.items) > 0:
+            if found is not None:
+                return None
+            found = index
+    return found
+
+
+def _hugged_document(header, parts):
+    """Keep every item on the opening and closing lines.
+
+    Only the one container among the items breaks across lines, so its
+    brackets hug the object's own, as in ``defaultdict(<class 'list'>, {``.
+    """
+    close = header.single_close if len(parts) == 1 else header.close
+    separator = _Text(header.sep + _SPACE)
+    return _Group(
+        _Concat((_Text(header.open), _join(separator, parts), _Text(close)))
+    )
 
 
 def _container_document(header, parts, positional, level, options):
@@ -629,6 +743,20 @@ def _render_lines(doc, width):
                 text = flat_text if flat else broken
                 out.append(text)
                 column += len(text)
+            case _Breakable(value=value):
+                if flat:
+                    lines = [repr(value)]
+                else:
+                    lines = _break_literal(
+                        node, column, width, _trailing_width(stack)
+                    )
+                out.append(lines[0])
+                column += len(lines[0])
+                for line in lines[1:]:
+                    yield _EMPTY.join(out)
+                    out.clear()
+                    out.append(line)
+                    column = len(line)
             case _KeyValue(key=key, value=value, hang=hang):
                 if flat or hang is None:
                     stack.append((indent, flat, value))
@@ -677,7 +805,50 @@ def _fits(remaining, first, rest):
                 remaining -= len(flat_text if flat else broken)
             case _KeyValue(key=key, value=value):
                 local.append((indent, flat, _Concat((key, _COLON_SPACE, value))))
+            case _Breakable(value=value):
+                if not flat:
+                    # It can break, so the rest goes on later lines.
+                    return True
+                remaining -= len(repr(value))
     return False
+
+
+def _trailing_width(stack):
+    """Return the width of the text that follows on the current line.
+
+    The scan stops at the first possible line break, including any group,
+    since whether a group breaks is not known yet.  This is the allowance
+    that PrettyPrinter leaves for closing brackets and separators.
+    """
+    total = 0
+    local = []
+    index = len(stack)
+    while True:
+        if local:
+            indent, flat, node = local.pop()
+        elif index:
+            index -= 1
+            indent, flat, node = stack[index]
+        else:
+            return total
+
+        match node:
+            case _Text(text=text):
+                if _NL in text:
+                    return total + text.index(_NL)
+                total += len(text)
+            case _Line(flat=flat_text):
+                if not flat:
+                    return total
+                total += len(flat_text)
+            case _Concat(parts=parts):
+                local.extend((indent, flat, part) for part in reversed(parts))
+            case _Nest(doc=inner) | _Align(doc=inner):
+                local.append((indent, flat, inner))
+            case _IfBroken(broken=broken, flat=flat_text):
+                total += len(flat_text if flat else broken)
+            case _:
+                return total
 
 # End of printer formatting and rendering.
 ########################################################################
@@ -706,8 +877,8 @@ def _frozendict_pprint(obj):
 
 
 def _ordered_dict_pprint(obj):
-    name = type(obj).__name__
-    yield Layout(open=f"{name}([", close="])", empty=f"{name}()")
+    yield Layout(empty=f"{type(obj).__name__}()")
+    yield ITEMS
     yield from obj.items()
 
 
@@ -718,12 +889,12 @@ def _dict_view_pprint(obj):
 
 
 def _mapping_view_pprint(obj):
-    yield Layout(open=f"{type(obj).__name__}(", close=")")
+    yield Layout(open=f"{type(obj).__name__}(", close=")", hug=True)
     yield obj._mapping
 
 
 def _tuple_pprint(obj):
-    yield Layout(open="(", close=")", single_close=",)")
+    yield Layout(open="(", close=")", single_close=",)", recursion="(...)")
     yield from obj
 
 
@@ -756,13 +927,25 @@ def _bytes_pprint(obj):
     yield BreakableBytes(obj)
 
 
+def _int_pprint(obj):
+    yield DELEGATE
+    yield FormattableNumber(obj)
+
+
+def _float_pprint(obj):
+    yield DELEGATE
+    yield FormattableNumber(obj)
+
+
 def _bytearray_pprint(obj):
-    yield Layout(open="bytearray(", close=")")
+    # There is only one item, so an empty separator leaves out the trailing
+    # comma when it breaks.
+    yield Layout(open="bytearray(", close=")", sep=_EMPTY)
     yield bytes(obj)
 
 
 def _mappingproxy_pprint(obj):
-    yield Layout(open="mappingproxy(", close=")")
+    yield Layout(open="mappingproxy(", close=")", hug=True)
     yield dict(obj)
 
 
@@ -774,7 +957,7 @@ def _namespace_pprint(obj):
 
 
 def _defaultdict_pprint(obj):
-    yield Layout(open=f"{type(obj).__name__}(", close=")")
+    yield Layout(open=f"{type(obj).__name__}(", close=")", hug=True)
     yield obj.default_factory
     yield dict(obj)
 
@@ -792,9 +975,11 @@ def _chainmap_pprint(obj):
 
 
 def _deque_pprint(obj):
-    close = "])" if obj.maxlen is None else f"], maxlen={obj.maxlen!r})"
-    yield Layout(open=f"{type(obj).__name__}([", close=close)
-    yield from obj
+    yield Layout(recursion="[...]", hug=True)
+    yield list(obj)
+    if obj.maxlen is not None:
+        yield KWARGS
+        yield "maxlen", obj.maxlen
 
 
 def _user_container_pprint(obj):
@@ -811,12 +996,12 @@ def _template_pprint(obj):
 
 
 def _interpolation_pprint(obj):
+    # Positional, to agree with repr().
     yield Layout(open=f"{type(obj).__name__}(", close=")")
-    yield KWARGS
-    yield "value", obj.value
-    yield "expression", obj.expression
-    yield "conversion", obj.conversion
-    yield "format_spec", obj.format_spec
+    yield obj.value
+    yield obj.expression
+    yield obj.conversion
+    yield obj.format_spec
 
 
 # End of __pprint__ implementations.

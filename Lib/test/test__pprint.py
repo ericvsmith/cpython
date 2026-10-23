@@ -1,10 +1,28 @@
+import _pprint
 import collections
+import enum
+import pprint
 import types
 import unittest
 from dataclasses import dataclass
+from string.templatelib import Interpolation
 from typing import NamedTuple
 
-from _pprint import KWARGS, Layout, Printer, decompose
+from _pprint import (
+    DELEGATE,
+    KWARGS,
+    LEAF,
+    BreakableString,
+    Expand,
+    FormattableNumber,
+    Layout,
+    Printer,
+    decompose,
+)
+
+
+def pformat(obj, **options):
+    return "\n".join(Printer(**options)(obj))
 
 
 class PprintProtocolTests(unittest.TestCase):
@@ -65,7 +83,8 @@ class PprintProtocolTests(unittest.TestCase):
     def test_string_and_bytes_wrap(self):
         text = "one two three four five six seven eight nine ten eleven twelve"
         self.assertIn("\n", "\n".join(Printer(width=20)(text)))
-        self.assertTrue("\n".join(Printer()(b"some bytes")).startswith("("))
+        # Like PrettyPrinter, only a bytes value that is split is parenthesized.
+        self.assertEqual("\n".join(Printer()(b"some bytes")), "b'some bytes'")
 
     def test_printer_call_yields_lines(self):
         printer = Printer(width=20)
@@ -99,6 +118,266 @@ class PprintProtocolTests(unittest.TestCase):
             "\n".join(Printer()(table)),
             "Table(headers=['Bass', 'Strings'], rows=[['Precision', 4], ['Stingray', 5]])",
         )
+
+
+class LeafTests(unittest.TestCase):
+    def test_leaf(self):
+        self.assertEqual(decompose(object()), (LEAF, None))
+        self.assertEqual(repr(LEAF), "pprint.LEAF")
+
+    def test_delegate_without_value_is_a_leaf(self):
+        class OnlyDelegate:
+            def __pprint__(self):
+                yield DELEGATE
+
+            def __repr__(self):
+                return "OnlyDelegate()"
+
+        self.assertEqual(decompose(OnlyDelegate()), (LEAF, None))
+        self.assertEqual(pformat(OnlyDelegate()), "OnlyDelegate()")
+
+    def test_empty_container_is_not_a_leaf(self):
+        layout, items = decompose([])
+        self.assertIsInstance(layout, Layout)
+        self.assertEqual(items, [])
+
+
+class PublicNamesTests(unittest.TestCase):
+    def test_reexported_from_pprint(self):
+        for name in pprint._PROTOCOL_NAMES:
+            with self.subTest(name=name):
+                self.assertIn(name, pprint.__all__)
+                self.assertIs(getattr(pprint, name), getattr(_pprint, name))
+
+    def test_description_type(self):
+        def method(self) -> pprint.DescriptionType:
+            yield 1
+
+        self.assertIs(method.__annotations__["return"], pprint.DescriptionType)
+
+
+class NumberTests(unittest.TestCase):
+    def test_int_and_float_delegate(self):
+        self.assertEqual(decompose(1), (DELEGATE, FormattableNumber(1)))
+        self.assertEqual(decompose(1.5), (DELEGATE, FormattableNumber(1.5)))
+
+    def test_default_is_repr(self):
+        self.assertEqual(pformat([10**9, 1234567.125]), "[1000000000, 1234567.125]")
+
+    def test_number_format(self):
+        self.assertEqual(
+            pformat([10**9, 1234567.125], number_format="_"),
+            "[1_000_000_000, 1_234_567.125]",
+        )
+        self.assertEqual(
+            pformat([10**9, 1234567.125], number_format=","),
+            "[1,000,000,000, 1,234,567.125]",
+        )
+
+    def test_number_format_error_uses_repr(self):
+        # 'x' is valid for an int, but not for a float.
+        self.assertEqual(pformat([255, 1.5], number_format="x"), "[ff, 1.5]")
+        self.assertEqual(pformat(FormattableNumber("text"), number_format=","), "'text'")
+
+    def test_subclasses_that_override_repr_are_leaves(self):
+        class Color(enum.IntEnum):
+            RED = 1000
+
+        self.assertEqual(decompose(True), (LEAF, None))
+        self.assertEqual(decompose(Color.RED), (LEAF, None))
+        self.assertEqual(
+            pformat([True, Color.RED], number_format=","),
+            "[True, <Color.RED: 1000>]",
+        )
+
+    def test_plain_subclass_is_formatted(self):
+        class MyInt(int):
+            pass
+
+        self.assertEqual(pformat(MyInt(1000), number_format=","), "1,000")
+
+
+class LiteralTests(unittest.TestCase):
+    TEXT = "word " * 12
+    DATA = b"0123456789" * 6
+
+    def test_short_literals(self):
+        self.assertEqual(pformat("abc"), "'abc'")
+        self.assertEqual(pformat(b"some bytes"), "b'some bytes'")
+        self.assertEqual(pformat(bytearray(b"ab")), "bytearray(b'ab')")
+
+    def test_top_level_string(self):
+        self.assertEqual(
+            pformat(self.TEXT, width=40, indent=1, expand=Expand.NEVER),
+            "('word word word word word word word '\n"
+            " 'word word word word word ')",
+        )
+        self.assertEqual(
+            pformat(self.TEXT, width=40),
+            "(\n"
+            "    'word word word word word word '\n"
+            "    'word word word word word word '\n"
+            ")",
+        )
+
+    def test_string_in_container_is_not_parenthesized(self):
+        self.assertEqual(
+            pformat([self.TEXT, 1], width=40, indent=1, expand=Expand.NEVER),
+            "['word word word word word word word '\n"
+            " 'word word word word word ',\n"
+            " 1]",
+        )
+        self.assertEqual(
+            pformat([self.TEXT, 1], width=40),
+            "[\n"
+            "    'word word word word word word '\n"
+            "    'word word word word word word ',\n"
+            "    1,\n"
+            "]",
+        )
+
+    def test_dict_value_continuation_is_aligned(self):
+        self.assertEqual(
+            pformat({"key": self.TEXT}, width=40),
+            "{\n"
+            "    'key': 'word word word word word '\n"
+            "           'word word word word word '\n"
+            "           'word word ',\n"
+            "}",
+        )
+
+    def test_matches_pretty_printer(self):
+        for obj in (self.TEXT, [self.TEXT, 1], {"k": [self.TEXT]}, self.DATA, [self.DATA]):
+            with self.subTest(obj=obj):
+                self.assertEqual(
+                    pformat(obj, width=40, indent=1, expand=Expand.NEVER),
+                    pprint.pformat(obj, width=40),
+                )
+                self.assertEqual(
+                    pformat(obj, width=40),
+                    pprint.pformat(obj, width=40, indent=4, expand=True),
+                )
+
+    def test_bytearray(self):
+        data = bytearray(b"0123456789" * 8)
+        self.assertEqual(
+            pformat(data, width=40, indent=1, expand=Expand.NEVER),
+            pprint.pformat(data, width=40),
+        )
+        self.assertEqual(
+            pformat(data, width=40),
+            "bytearray(\n"
+            "    b'01234567890123456789012345678901'\n"
+            "    b'23456789012345678901234567890123'\n"
+            "    b'4567890123456789'\n"
+            ")",
+        )
+
+    def test_breakable_string_from_user_class(self):
+        class Text:
+            def __init__(self, text):
+                self.text = text
+
+            def __pprint__(self):
+                yield DELEGATE
+                yield BreakableString(self.text)
+
+        self.assertEqual(pformat(Text(self.TEXT), width=40), pformat(self.TEXT, width=40))
+
+
+class HugTests(unittest.TestCase):
+    WORDS = ["precision", "jazz", "stingray", "thunderbird", "rickenbacker"]
+
+    def test_defaultdict(self):
+        obj = collections.defaultdict(list, {w: [1] for w in self.WORDS[:3]})
+        self.assertEqual(
+            pformat(obj, width=40),
+            "defaultdict(<class 'list'>, {\n"
+            "    'jazz': [1],\n"
+            "    'precision': [1],\n"
+            "    'stingray': [1],\n"
+            "})",
+        )
+        self.assertEqual(
+            pformat(obj, width=40, indent=1, expand=Expand.NEVER),
+            pprint.pformat(obj, width=40),
+        )
+
+    def test_matches_pretty_printer(self):
+        mapping = {w: len(w) for w in self.WORDS}
+        objects = [
+            collections.defaultdict(list, {w: [1] for w in self.WORDS}),
+            types.MappingProxyType(mapping),
+            collections.abc.KeysView(mapping),
+            collections.deque(self.WORDS),
+            collections.deque(self.WORDS, maxlen=10),
+        ]
+        for obj in objects:
+            with self.subTest(type=type(obj).__name__):
+                self.assertEqual(
+                    pformat(obj, width=40),
+                    pprint.pformat(obj, width=40, indent=4, expand=True),
+                )
+
+    def test_deque_maxlen_never(self):
+        obj = collections.deque(self.WORDS, maxlen=10)
+        self.assertEqual(
+            pformat(obj, width=40, indent=1, expand=Expand.NEVER),
+            pprint.pformat(obj, width=40),
+        )
+
+    def test_fits_on_one_line(self):
+        obj = collections.deque([1, 2], maxlen=3)
+        self.assertEqual(pformat(obj), repr(obj))
+
+    def test_no_hug_with_two_containers(self):
+        class Pair:
+            def __pprint__(self):
+                yield Layout(hug=True)
+                yield ["precision", "jazz"]
+                yield ["stingray", "thunderbird"]
+
+        self.assertEqual(
+            pformat(Pair(), width=40),
+            "Pair(\n"
+            "    ['precision', 'jazz'],\n"
+            "    ['stingray', 'thunderbird'],\n"
+            ")",
+        )
+
+    def test_hug_ignored_when_never(self):
+        obj = collections.defaultdict(list, {w: [1] for w in self.WORDS})
+        self.assertTrue(pformat(obj, width=40, expand=Expand.NEVER).startswith(
+            "defaultdict(<class 'list'>,\n"
+        ))
+
+
+class DescriptionTests(unittest.TestCase):
+    def test_ordered_dict(self):
+        obj = collections.OrderedDict(b=2, a=1)
+        self.assertEqual(pformat(obj), repr(obj))
+        self.assertEqual(
+            pformat(obj, width=10),
+            "OrderedDict({\n"
+            "    'b': 2,\n"
+            "    'a': 1,\n"
+            "})",
+        )
+
+    def test_tuple_recursion(self):
+        items = []
+        obj = (items,)
+        items.append(obj)
+        self.assertEqual(pformat(obj), repr(obj))
+
+    def test_deque_recursion(self):
+        obj = collections.deque()
+        obj.append(obj)
+        self.assertEqual(pformat(obj), repr(obj))
+
+    def test_interpolation_agrees_with_repr(self):
+        value = Interpolation([1, 2], "x", "r", "")
+        self.assertEqual(pformat(value), repr(value))
 
 
 if __name__ == "__main__":

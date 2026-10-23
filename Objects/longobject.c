@@ -8,7 +8,7 @@
 #include "pycore_call.h"          // _PyObject_MakeTpCall
 #include "pycore_freelist.h"      // _Py_FREELIST_FREE, _Py_FREELIST_POP
 #include "pycore_long.h"          // _Py_SmallInts
-#include "pycore_object.h"        // _PyObject_Init()
+#include "pycore_object.h"        // _PyObject_Init(), _PyObject_PPRINT_METHOD
 #include "pycore_runtime.h"       // _PY_NSMALLPOSINTS
 #include "pycore_stackref.h"
 #include "pycore_structseq.h"     // _PyStructSequence_FiniBuiltin()
@@ -6548,7 +6548,11 @@ long_vectorcall(PyObject *type, PyObject * const*args,
     }
 }
 
+_PyObject_PPRINT_METHOD(_pprint_bridge_int_pprint, "_int_pprint")
+
 static PyMethodDef long_methods[] = {
+    {"__pprint__", _pprint_bridge_int_pprint, METH_NOARGS, PyDoc_STR("Describe object for pretty printing.")},
+
     {"conjugate",       long_long_meth, METH_NOARGS,
      "Returns self, the complex conjugate of any int."},
     INT_BIT_LENGTH_METHODDEF

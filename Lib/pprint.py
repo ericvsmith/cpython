@@ -39,8 +39,30 @@ import sys as _sys
 import types as _types
 from io import StringIO as _StringIO
 
+# The pretty print protocol of PEP 813.  These names are defined in _pprint,
+# which is imported the first time one of them is used, so that importing
+# pprint stays cheap.
+_PROTOCOL_NAMES = (
+    "VALUES", "KWARGS", "ITEMS", "DELEGATE", "LEAF", "Layout", "Keyword",
+    "Entry", "BreakableString", "BreakableBytes", "FormattableNumber",
+    "DescriptionType", "decompose", "Printer", "Expand",
+)
+
 __all__ = ["pprint","pformat","isreadable","isrecursive","saferepr",
-           "PrettyPrinter", "pp"]
+           "PrettyPrinter", "pp", *_PROTOCOL_NAMES]
+
+
+def __getattr__(name):
+    if name in _PROTOCOL_NAMES:
+        import _pprint
+        value = getattr(_pprint, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted({*globals(), *_PROTOCOL_NAMES})
 
 
 def pprint(object, stream=None, indent=1, width=80, depth=None, *,
