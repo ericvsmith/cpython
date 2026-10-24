@@ -99,6 +99,17 @@ Module contents
      If the class already defines :meth:`!__repr__`, this parameter is
      ignored.
 
+     When a :meth:`!__repr__` method is generated, a
+     :meth:`~object.__pprint__` method is generated too, unless the class
+     already defines one.  It describes the same fields as the generated
+     repr, so a :class:`pprint.Printer` can wrap them to fit its width.  If
+     the class defines its own :meth:`!__repr__`, no :meth:`!__pprint__` is
+     generated, and the hand-written repr is used for pretty printing too.
+
+     .. versionchanged:: next
+        A :meth:`~object.__pprint__` method is generated with
+        :meth:`!__repr__`.
+
    - *eq*: If true (the default), an :meth:`~object.__eq__` method will be
      generated.
 

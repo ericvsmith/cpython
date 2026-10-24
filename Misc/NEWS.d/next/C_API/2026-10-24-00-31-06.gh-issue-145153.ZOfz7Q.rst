@@ -1,0 +1,2 @@
+Add :c:func:`PyObject_Pretty` to the limited C API, the function behind the
+``!p`` conversion of :pep:`813`.

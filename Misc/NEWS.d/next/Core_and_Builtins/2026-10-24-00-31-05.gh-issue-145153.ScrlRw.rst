@@ -1,0 +1,3 @@
+Add the ``!p`` conversion of :pep:`813` to f-strings, t-strings and
+:meth:`str.format`.  It pretty prints a value with :class:`pprint.Printer`,
+and an f-string can name the printer to use, as in ``f'{obj!p:{printer}}'``.

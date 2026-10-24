@@ -223,7 +223,7 @@ The grammar for a replacement field is as follows:
    attribute_name: `~python-grammar:identifier`
    element_index: `~python-grammar:digit`+ | `index_string`
    index_string: <any source character except "]"> +
-   conversion: "r" | "s" | "a"
+   conversion: "r" | "s" | "a" | "p"
    format_spec: `format-spec:format_spec`
 
 In less formal terms, the replacement field can start with a *field_name* that specifies
@@ -274,15 +274,22 @@ as a string, overriding its own definition of formatting.  By converting the
 value to a string before calling :meth:`~object.__format__`, the normal formatting logic
 is bypassed.
 
-Three conversion flags are currently supported: ``'!s'`` which calls :func:`str`
-on the value, ``'!r'`` which calls :func:`repr` and ``'!a'`` which calls
-:func:`ascii`.
+Four conversion flags are currently supported: ``'!s'`` which calls :func:`str`
+on the value, ``'!r'`` which calls :func:`repr`, ``'!a'`` which calls
+:func:`ascii`, and ``'!p'`` which pretty prints the value with
+:class:`pprint.Printer` (see :ref:`pprint-protocol`).  As with the other
+conversions, a *format_spec* after ``'!p'`` is applied to the pretty printed
+string.
 
 Some examples::
 
    "Harold's a clever {0!s}"        # Calls str() on the argument first
    "Bring out the holy {name!r}"    # Calls repr() on the argument first
    "More {!a}"                      # Calls ascii() on the argument first
+   "Pretty {!p}"                    # Pretty prints the argument first
+
+.. versionchanged:: next
+   Added the ``'!p'`` conversion.
 
 The *format_spec* field contains a specification of how the value should be
 presented, including such details as field width, alignment, padding, decimal

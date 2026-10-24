@@ -62,10 +62,49 @@ Summary -- Release highlights
 .. This section singles out the most important changes in Python 3.16.
    Brevity is key.
 
+* :ref:`PEP 813: The pretty print protocol <whatsnew316-pep813>`
 
 
 New features
 ============
+
+.. _whatsnew316-pep813:
+
+:pep:`813`: The pretty print protocol
+-------------------------------------
+
+Classes can now describe the pretty printed form of their instances with a
+:meth:`~object.__pprint__` method.  The method yields the object's items, and
+a printer decides how to lay them out::
+
+   import pprint
+
+   class Bass:
+       def __init__(self, model, strings=4):
+           self.model = model
+           self.strings = strings
+
+       def __pprint__(self):
+           yield self.model
+           yield pprint.KWARGS
+           yield 'strings', self.strings, 4
+
+The new ``!p`` conversion pretty prints a value in :ref:`f-strings <f-strings>`
+and :meth:`str.format`, and an f-string can name the printer to use, as in
+``f'{obj!p:{printer}}'``.  T-strings record ``!p`` and its printer in the new
+:attr:`Interpolation.printer <string.templatelib.Interpolation.printer>`
+attribute.
+
+The new :class:`pprint.Printer` class is the default printer.  Its defaults of
+``width=78``, ``indent=4`` and ``expand=pprint.Expand.FIT`` give output close to
+code formatted by tools such as Black and Ruff.  The built-in and standard
+library types, :func:`dataclasses.dataclass` classes and
+:func:`collections.namedtuple` classes implement :meth:`!__pprint__`.
+:class:`pprint.PrettyPrinter` is unchanged, and is now :term:`soft deprecated`.
+
+See :ref:`pprint-protocol` and :pep:`813` for details.
+
+(Contributed by Eric V. Smith and Barry Warsaw in :gh:`145153`.)
 
 
 
@@ -1029,6 +1068,13 @@ Deprecated
 New deprecations
 ----------------
 
+* :mod:`pprint`:
+
+  * :class:`pprint.PrettyPrinter` is now :term:`soft deprecated`.  It is not
+    scheduled for removal, but no new features will be added to it.  Use
+    :class:`pprint.Printer` instead.
+    (Contributed by Barry Warsaw and Eric V. Smith in :gh:`145153`.)
+
 * :mod:`abc`:
 
   * :class:`abc.abstractclassmethod`, :class:`abc.abstractstaticmethod`,
@@ -1201,6 +1247,10 @@ New features
 * Add :c:macro:`Py_SETREF` and :c:macro:`Py_XSETREF` macros to the limited C
   API.
   (Contributed by Nathan Goldbaum and Victor Stinner in :gh:`158842`.)
+
+* Add :c:func:`PyObject_Pretty` to the limited C API, the function behind the
+  new ``!p`` conversion.  See :pep:`813`.
+  (Contributed by Eric V. Smith in :gh:`145153`.)
 
 Porting to Python 3.16
 ----------------------

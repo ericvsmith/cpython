@@ -1270,7 +1270,7 @@ sequences (``f_quote``).
       | '{' `f_expression` [`f_debug_specifier`] [`fstring_conversion`]
             [`fstring_full_format_spec`] '}'
    fstring_conversion:
-      | "!" ("s" | "r" | "a")
+      | "!" ("s" | "r" | "a" | "p")
    fstring_full_format_spec:
       | ':' `fstring_format_spec`*
    fstring_format_spec:

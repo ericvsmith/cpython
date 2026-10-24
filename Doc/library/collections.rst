@@ -927,6 +927,10 @@ they add the ability to access fields by name instead of position index.
        Added the *defaults* parameter and the :attr:`~somenamedtuple._field_defaults`
        attribute.
 
+    .. versionchanged:: next
+       Named tuples have a :meth:`~object.__pprint__` method, so a
+       :class:`pprint.Printer` can wrap their fields to fit its width.
+
 .. doctest::
     :options: +NORMALIZE_WHITESPACE
 

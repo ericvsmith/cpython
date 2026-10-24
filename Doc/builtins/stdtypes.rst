@@ -3242,15 +3242,6 @@ Each replacement field must contain an expression, optionally followed by:
 See the :ref:`Lexical Analysis section on f-strings <f-strings>` for details
 on the syntax of these fields.
 
-The ``!p`` conversion calls a printer with the value and joins the strings it
-returns with newlines. Its format specifier is passed as the printer without
-converting a replacement field to a string. The format specifier must be a
-single replacement field whose value is callable. If it is omitted or empty,
-a default printer is used. The default printer calls ``__pprint__()`` when
-available and interprets its iterable as a description of the object's layout
-and contents. If the method is absent, the default printer falls back to
-:func:`repr`.
-
 Debug specifier
 ^^^^^^^^^^^^^^^
 
@@ -3294,6 +3285,7 @@ The conversion can be specified explicitly using one of these specifiers:
 * ``!s`` for :func:`str`
 * ``!r`` for :func:`repr`
 * ``!a`` for :func:`ascii`
+* ``!p`` for pretty printing, described below
 
 For example::
 
@@ -3311,6 +3303,34 @@ For example::
 
    >>> f'{string = !a}'
    "string = '\\xa1ko\\u010dka \\U0001f638!'"
+
+The ``!p`` conversion pretty prints the value with :class:`pprint.Printer`,
+which uses the value's :meth:`~object.__pprint__` method (see
+:ref:`pprint-protocol`).  Unlike the other conversions, its format specifier
+names the printer to use.  It must be empty, or a single replacement field
+with no conversion or format specifier of its own, whose value is called with
+the value to print.  The replacement field is not converted to a string.  If
+the specifier is empty or omitted, or its value is ``None``, the default
+printer is used.  The printer returns the lines of the pretty printed form,
+which are joined with newlines, without a trailing newline:
+
+.. code-block:: pycon
+   :force:
+
+   >>> import pprint
+   >>> basses = {'stingray': ['B', 'E', 'A', 'D', 'G'], 'jazz': ['E', 'A', 'D', 'G']}
+   >>> print(f'{basses!p:{pprint.Printer(width=50)}}')
+   {
+       'jazz': ['E', 'A', 'D', 'G'],
+       'stingray': ['B', 'E', 'A', 'D', 'G'],
+   }
+
+Any other format specifier after ``!p``, such as ``f'{basses!p:>40}'``, is a
+:exc:`SyntaxError`.  :exc:`TypeError` is raised if the printer returns a
+:class:`str`, or if any line is not a :class:`str`.
+
+.. versionchanged:: next
+   Added the ``!p`` conversion.
 
 
 Format specifier

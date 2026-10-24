@@ -1,0 +1,6 @@
+Add the pretty print protocol of :pep:`813`.  Classes can describe their
+pretty printed form with a :meth:`~object.__pprint__` method, and the new
+:class:`pprint.Printer` class lays out those descriptions.  The built-in and
+standard library types, :func:`dataclasses.dataclass` classes and
+:func:`collections.namedtuple` classes implement :meth:`!__pprint__`.
+:class:`pprint.PrettyPrinter` is now :term:`soft deprecated`.

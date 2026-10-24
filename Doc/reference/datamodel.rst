@@ -2172,6 +2172,32 @@ Basic customization
       than ``format(str(x), '')``.
 
 
+.. method:: object.__pprint__(self)
+
+   .. index::
+      single: pretty printing
+      pair: module; pprint
+
+   Called by :class:`pprint.Printer`, and so by the ``!p`` conversion in
+   :ref:`formatted string literals <f-strings>` and :meth:`str.format`, to
+   describe the pretty printed form of an object.  It returns an iterable,
+   usually by being a generator, of the object's items, optionally preceded by
+   a :class:`pprint.Layout` and divided into sections by
+   :data:`pprint.VALUES`, :data:`pprint.KWARGS` and :data:`pprint.ITEMS`.  The
+   method describes the object's structure, and the printer decides how to lay
+   it out.  See :ref:`pprint-protocol` for the full description.
+
+   The method is optional, and :class:`object` does not define it.  Without
+   it, printers use :meth:`__repr__`.  An inherited :meth:`!__pprint__` is
+   used only if the class that provides it comes no later in the
+   :term:`method resolution order` than the class that provides
+   :meth:`__repr__`.  So a subclass that overrides :meth:`__repr__` is printed
+   with its own :func:`repr` unless it also provides :meth:`!__pprint__`, for
+   example with ``__pprint__ = dict.__pprint__``.
+
+   .. versionadded:: next
+
+
 .. _richcmpfuncs:
 .. method:: object.__lt__(self, other)
             object.__le__(self, other)
